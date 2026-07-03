@@ -28,6 +28,8 @@ function ri_normalize_config(): array
         'indexDatabase' => ri_config_string_with_env('RI_INDEX_DATABASE', '.runtime/image-index.sqlite'),
         'indexLock' => ri_config_string_with_env('RI_INDEX_LOCK', '.runtime/index.lock'),
         'indexLog' => ri_config_string_with_env('RI_INDEX_LOG', '.runtime/index.log'),
+        'indexLogMaxBytes' => ri_config_int_with_env('RI_INDEX_LOG_MAX_BYTES', 1048576),
+        'indexLogBackups' => ri_config_int_with_env('RI_INDEX_LOG_BACKUPS', 3),
         'imageExtensions' => ri_config_list_with_env('RI_IMAGE_EXTENSIONS', RI_DEFAULT_IMAGE_EXTENSIONS),
         'allowSvg' => ri_config_bool_with_env('RI_ALLOW_SVG', false),
         'defaultMode' => ri_config_string_with_env('RI_DEFAULT_MODE', 'redirect'),
@@ -98,6 +100,14 @@ function ri_normalize_config(): array
 
     if (!in_array($config['defaultMode'], ['redirect', 'json'], true)) {
         ri_send_error(500, 'invalid_config', 'defaultMode must be redirect or json.');
+    }
+
+    if ($config['indexLogMaxBytes'] < 0 || $config['indexLogMaxBytes'] > 104857600) {
+        ri_send_error(500, 'invalid_config', 'RI_INDEX_LOG_MAX_BYTES must be between 0 and 104857600.');
+    }
+
+    if ($config['indexLogBackups'] < 0 || $config['indexLogBackups'] > 50) {
+        ri_send_error(500, 'invalid_config', 'RI_INDEX_LOG_BACKUPS must be between 0 and 50.');
     }
 
     if ($config['linkCheck']['timeoutSeconds'] < 1 || $config['linkCheck']['timeoutSeconds'] > 60) {

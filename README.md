@@ -100,6 +100,8 @@ HTTP requests never scan directories. Rebuild the index after adding, deleting, 
 
 The index command also organizes local files: it creates `pc/` and `mobile/` inside each configured category when needed, then moves detected landscape and portrait images into those folders. Files that cannot be classified are left where they are.
 
+Index logs are written to `RI_INDEX_LOG` and rotated by size. The defaults keep the active log under `1048576` bytes and retain `3` backups; adjust `RI_INDEX_LOG_MAX_BYTES` and `RI_INDEX_LOG_BACKUPS` in `.env` when needed.
+
 Local PHP path used during development:
 
 ```text

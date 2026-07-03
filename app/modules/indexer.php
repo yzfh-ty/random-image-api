@@ -193,6 +193,8 @@ function ri_append_index_log(array $config, string $baseDir, string $event, arra
         return;
     }
 
+    ri_rotate_index_log_if_needed($logPath, $config['indexLogMaxBytes'], $config['indexLogBackups']);
+
     $line = json_encode([
         'time' => gmdate('c'),
         'event' => $event,
@@ -202,6 +204,38 @@ function ri_append_index_log(array $config, string $baseDir, string $event, arra
     if ($line !== false) {
         file_put_contents($logPath, $line . PHP_EOL, FILE_APPEND | LOCK_EX);
     }
+}
+
+function ri_rotate_index_log_if_needed(string $logPath, int $maxBytes, int $backups): void
+{
+    if ($maxBytes < 1 || !is_file($logPath)) {
+        return;
+    }
+
+    $size = filesize($logPath);
+    if ($size === false || $size < $maxBytes) {
+        return;
+    }
+
+    if ($backups < 1) {
+        @unlink($logPath);
+        return;
+    }
+
+    $oldest = $logPath . '.' . $backups;
+    if (is_file($oldest)) {
+        @unlink($oldest);
+    }
+
+    for ($index = $backups; $index >= 2; $index--) {
+        $source = $logPath . '.' . ($index - 1);
+        $target = $logPath . '.' . $index;
+        if (is_file($source)) {
+            @rename($source, $target);
+        }
+    }
+
+    @rename($logPath, $logPath . '.1');
 }
 
 function ri_prepare_index_rebuild(PDO $index): void

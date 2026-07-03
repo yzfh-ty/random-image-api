@@ -116,6 +116,8 @@ function ri_cli_config_snapshot(array $config, string $baseDir): array
             'database' => $config['indexDatabase'],
             'lock' => $config['indexLock'],
             'log' => $config['indexLog'],
+            'logMaxBytes' => $config['indexLogMaxBytes'],
+            'logBackups' => $config['indexLogBackups'],
         ],
         'images' => [
             'extensions' => $config['imageExtensions'],
