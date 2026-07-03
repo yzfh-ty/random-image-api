@@ -50,7 +50,7 @@ RI_DEFAULT_MODE=redirect
 RI_HTTP_PROXY=
 ```
 
-Supported variables are listed in `.env.example`. Set `RI_TRUST_PROXY=true` only when the app is behind a trusted reverse proxy.
+Supported variables are listed in `.env.example`. By default, only `localhost`, `127.0.0.1`, and `[::1]` are accepted as request hosts; set `RI_ALLOWED_HOSTS` to your production domain names before deploying. Set `RI_TRUST_PROXY=true` only when the app is behind a trusted reverse proxy.
 
 ## Directory Example
 
@@ -197,6 +197,7 @@ curl.exe -H "Authorization: Bearer replace-with-a-long-random-token" http://127.
 - Use `public/` as the web root.
 - `public/.htaccess` handles Apache rewrites and blocks dotfiles. The application entrypoint lives in `public/`.
 - Only `GET` and `HEAD` are allowed.
+- Host headers are restricted by `RI_ALLOWED_HOSTS`; production domains must be listed explicitly.
 - Top-level categories must be present in `RI_FOLDERS`.
 - Paths reject `../`, backslashes, and null bytes.
 - Short URLs do not expose original file names.

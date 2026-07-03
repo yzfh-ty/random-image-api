@@ -50,7 +50,7 @@ RI_DEFAULT_MODE=redirect
 RI_HTTP_PROXY=
 ```
 
-完整变量列表见 `.env.example`。只有服务位于可信反向代理后面，才设置 `RI_TRUST_PROXY=true`。
+完整变量列表见 `.env.example`。默认只接受 `localhost`、`127.0.0.1` 和 `[::1]` 作为请求 Host；部署到生产域名之前必须把域名写入 `RI_ALLOWED_HOSTS`。只有服务位于可信反向代理后面，才设置 `RI_TRUST_PROXY=true`。
 
 ## 目录示例
 
@@ -197,6 +197,7 @@ curl.exe -H "Authorization: Bearer replace-with-a-long-random-token" http://127.
 - 推荐 Web 根目录指向 `public/`。
 - `public/.htaccess` 负责 Apache 路由重写并阻止访问点文件；应用入口只保留在 `public/`。
 - 只允许 `GET` 和 `HEAD` 请求。
+- Host 头受 `RI_ALLOWED_HOSTS` 限制；生产域名必须显式列出。
 - 顶层分类必须配置在 `RI_FOLDERS` 中。
 - 路径会拒绝 `../`、反斜杠和空字节。
 - 短链接不暴露原始文件名。

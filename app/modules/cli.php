@@ -166,6 +166,11 @@ function ri_cli_doctor(string $baseDir): array
     if ($config['linkCheck']['concurrency'] > 1 && !function_exists('curl_multi_init')) {
         ri_cli_add_check($checks, 'linkcheck_concurrency', 'warn', 'Concurrent link checks require cURL; sequential fallback will be used.');
     }
+    if ($config['server']['allowedHosts'] === RI_DEFAULT_ALLOWED_HOSTS) {
+        ri_cli_add_check($checks, 'allowed_hosts', 'warn', 'Only local development hosts are allowed; set RI_ALLOWED_HOSTS for production domains.');
+    } else {
+        ri_cli_add_check($checks, 'allowed_hosts', 'ok', 'Allowed hosts are configured.');
+    }
 
     $imageRoot = ri_resolve_path($baseDir, $config['imageRoot']);
     ri_cli_add_path_check($checks, 'image_root', $imageRoot, true);

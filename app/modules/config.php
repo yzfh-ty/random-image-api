@@ -16,7 +16,7 @@ function ri_normalize_config(): array
             'host' => ri_config_string_with_env('RI_SERVER_HOST', '0.0.0.0'),
             'port' => ri_config_int_with_env('RI_SERVER_PORT', 3000),
             'trustProxy' => ri_config_bool_with_env('RI_TRUST_PROXY', false),
-            'allowedHosts' => ri_config_list_with_env('RI_ALLOWED_HOSTS', []),
+            'allowedHosts' => ri_config_list_with_env('RI_ALLOWED_HOSTS', RI_DEFAULT_ALLOWED_HOSTS),
         ],
         'imageRoot' => ri_config_string_with_env('RI_IMAGE_ROOT', 'images'),
         'folders' => ri_config_list_with_env('RI_FOLDERS', []),
@@ -49,6 +49,10 @@ function ri_normalize_config(): array
 
     if ($config['folders'] === []) {
         ri_send_error(500, 'invalid_config', 'At least one folder must be configured.');
+    }
+
+    if ($config['server']['allowedHosts'] === []) {
+        $config['server']['allowedHosts'] = RI_DEFAULT_ALLOWED_HOSTS;
     }
 
     foreach ($config['server']['allowedHosts'] as $host) {
