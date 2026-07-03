@@ -209,20 +209,29 @@ function ri_get_index_meta(PDO $index, string $key): ?string
     return $value === false ? null : (string)$value;
 }
 
-function ri_find_item_by_index(PDO $index, array $config, string $baseDir, string $folder, int $id, string $extension): ?array
+function ri_find_item_by_index(PDO $index, array $config, string $baseDir, string $folder, int $id, string $extension, bool $requireChecked = false): ?array
 {
-    $statement = $index->prepare(
-        'SELECT folder, index_key, source_type, target, extension, orientation, id
-         FROM image_index
-         WHERE folder = :folder
-           AND id = :id
-           AND extension = :extension'
-    );
-    $statement->execute([
+    $whereParts = [
+        'i.folder = :folder',
+        'i.id = :id',
+        'i.extension = :extension',
+    ];
+    $params = [
         ':folder' => $folder,
         ':id' => $id,
         ':extension' => $extension,
-    ]);
+    ];
+    if ($requireChecked) {
+        ri_add_remote_checked_filter($whereParts, $params, $config);
+    }
+
+    $statement = $index->prepare(
+        'SELECT i.folder, i.index_key, i.source_type, i.target, i.extension, i.orientation, i.id
+         FROM image_index AS i
+         WHERE ' . implode(' AND ', $whereParts)
+    );
+    ri_bind_sql_params($statement, $params);
+    $statement->execute();
 
     $row = $statement->fetch(PDO::FETCH_ASSOC);
     if (!is_array($row)) {
@@ -247,6 +256,27 @@ function ri_rows_to_items(array $rows, array $config, string $baseDir): array
     }
 
     return $items;
+}
+
+function ri_add_remote_checked_filter(array &$whereParts, array &$params, array $config): void
+{
+    if (!($config['remote']['requireChecked'] ?? true)) {
+        return;
+    }
+
+    $whereParts[] = '(
+        i.source_type != "remote"
+        OR EXISTS (
+            SELECT 1
+            FROM remote_link_checks AS r
+            WHERE r.folder = i.folder
+              AND r.image_id = i.id
+              AND r.url = i.target
+              AND r.ok = 1
+              AND r.checked_at >= :remote_checked_after
+        )
+    )';
+    $params[':remote_checked_after'] = gmdate('c', time() - (int)$config['remote']['checkMaxAgeSeconds']);
 }
 
 function ri_row_to_item(array $row, array $config, string $baseDir): ?array
@@ -293,7 +323,7 @@ function ri_row_to_item(array $row, array $config, string $baseDir): ?array
         return $item;
     }
 
-    if ($sourceType === 'remote' && ri_is_safe_remote_url($target, $config, false)) {
+    if ($sourceType === 'remote' && ri_is_safe_remote_url($target, $config, true)) {
         $item['originalUrl'] = $target;
         return $item;
     }

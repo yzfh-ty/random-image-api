@@ -11,7 +11,7 @@ function ri_handle_request(string $baseDir): void
     $path = ri_request_path();
 
     if ($path === '') {
-        ri_handle_random_database_request('/', null, $index, $config, $baseDir);
+        ri_handle_random_database_request(null, $index, $config, $baseDir);
     }
 
     $segments = ri_decode_path_segments($path);
@@ -20,6 +20,10 @@ function ri_handle_request(string $baseDir): void
     }
 
     $first = $segments[0];
+    if ($first === '_health') {
+        ri_handle_health_request($segments, $index, $config);
+    }
+
     if ($first === ltrim($config['adminPrefix'], '/')) {
         ri_handle_admin_request($segments, $config, $index);
     }
@@ -31,11 +35,39 @@ function ri_handle_request(string $baseDir): void
     ri_handle_folder_random_request($segments, $config, $index, $baseDir);
 }
 
-function ri_handle_random_database_request(string $scopeKey, ?string $folder, PDO $index, array $config, string $baseDir): void
+function ri_handle_health_request(array $segments, PDO $index, array $config): void
+{
+    if (count($segments) !== 1) {
+        ri_send_error(404, 'not_found', 'Route not found.');
+    }
+
+    $status = ri_index_status($index, $config);
+    $payload = ri_health_payload($status);
+    ri_send_json($payload['ok'] ? 200 : 503, $payload);
+}
+
+function ri_health_payload(array $status): array
+{
+    $healthy = ($status['schemaVersion'] === RI_IMAGE_INDEX_SCHEMA_VERSION)
+        && ($status['lastIndexedError'] === null);
+
+    return [
+        'ok' => $healthy,
+        'schemaVersion' => $status['schemaVersion'],
+        'lastIndexedAt' => $status['lastIndexedAt'],
+        'hasIndexError' => $status['lastIndexedError'] !== null,
+        'total' => $status['total'],
+        'remoteServiceable' => $status['remoteLinkChecks']['serviceable'],
+    ];
+}
+
+function ri_handle_random_database_request(?string $folder, PDO $index, array $config, string $baseDir): void
 {
     $source = ri_source_filter();
     $imageType = ri_requested_image_type();
-    $item = ri_select_and_remember_indexed_item($index, $config, $baseDir, $scopeKey, $folder, $source, $imageType);
+    $item = $folder === null
+        ? ri_random_item_for_all($index, $config, $baseDir, $source, $imageType)
+        : ri_random_item_for_folder($index, $config, $baseDir, $folder, $source, $imageType);
     if ($item === null) {
         ri_send_error(404, 'empty_pool', 'No indexed image found. Run the CLI index command first.');
     }
@@ -43,38 +75,12 @@ function ri_handle_random_database_request(string $scopeKey, ?string $folder, PD
     ri_respond_random_item($item, $config);
 }
 
-function ri_select_and_remember_indexed_item(
-    PDO $index,
-    array $config,
-    string $baseDir,
-    string $scopeKey,
-    ?string $folder,
-    ?string $source,
-    ?string $imageType
-): ?array {
-    ri_start_session($config);
-    $_SESSION['last_served'] ??= [];
-    $sessionKey = $scopeKey . '|' . ($source ?? 'all') . '|' . ($imageType ?? 'all-types');
-    $lastKey = is_string($_SESSION['last_served'][$sessionKey] ?? null) ? $_SESSION['last_served'][$sessionKey] : null;
-    $item = $folder === null
-        ? ri_random_item_for_all($index, $config, $baseDir, $source, $imageType, $lastKey)
-        : ri_random_item_for_folder($index, $config, $baseDir, $folder, $source, $imageType, $lastKey);
-
-    if ($item !== null) {
-        $_SESSION['last_served'][$sessionKey] = ri_image_key($item);
-    }
-    session_write_close();
-
-    return $item;
-}
-
 function ri_random_item_for_all(
     PDO $index,
     array $config,
     string $baseDir,
     ?string $source = null,
-    ?string $imageType = null,
-    ?string $lastKey = null
+    ?string $imageType = null
 ): ?array
 {
     $folders = $config['folders'];
@@ -93,8 +99,7 @@ function ri_random_item_for_all(
         'i.folder IN (' . implode(', ', array_keys($placeholders)) . ')',
         $params,
         $source,
-        $imageType,
-        $lastKey
+        $imageType
     );
 }
 
@@ -104,8 +109,7 @@ function ri_random_item_for_folder(
     string $baseDir,
     string $folder,
     ?string $source = null,
-    ?string $imageType = null,
-    ?string $lastKey = null
+    ?string $imageType = null
 ): ?array {
     return ri_random_item_from_query(
         $index,
@@ -115,8 +119,7 @@ function ri_random_item_for_folder(
         'i.folder = :folder',
         [':folder' => $folder],
         $source,
-        $imageType,
-        $lastKey
+        $imageType
     );
 }
 
@@ -128,8 +131,7 @@ function ri_random_item_from_query(
     string $whereSql,
     array $params,
     ?string $source,
-    ?string $imageType,
-    ?string $lastKey
+    ?string $imageType
 ): ?array {
     $whereParts = [$whereSql];
     if ($source === 'local' || $source === 'remote') {
@@ -140,6 +142,7 @@ function ri_random_item_from_query(
         $whereParts[] = 'i.orientation = :orientation';
         $params[':orientation'] = $imageType;
     }
+    ri_add_remote_checked_filter($whereParts, $params, $config);
 
     $stats = ri_candidate_folder_stats($index, $fromSql, $whereParts, $params);
     $total = ri_total_candidate_count($stats);
@@ -149,20 +152,7 @@ function ri_random_item_from_query(
 
     $candidateWhereParts = $whereParts;
     $candidateParams = $params;
-    $last = ri_parse_image_key($lastKey);
-    if ($total > 1 && $last !== null) {
-        $candidateWhereParts[] = 'NOT (i.folder = :last_folder AND i.id = :last_id)';
-        $candidateParams[':last_folder'] = $last['folder'];
-        $candidateParams[':last_id'] = $last['id'];
-        $candidateStats = ri_candidate_folder_stats($index, $fromSql, $candidateWhereParts, $candidateParams);
-        if (ri_total_candidate_count($candidateStats) < 1) {
-            $candidateWhereParts = $whereParts;
-            $candidateParams = $params;
-            $candidateStats = $stats;
-        }
-    } else {
-        $candidateStats = $stats;
-    }
+    $candidateStats = $stats;
 
     $folderStats = ri_pick_candidate_folder_stats($candidateStats);
     if ($folderStats === null) {
@@ -291,29 +281,6 @@ function ri_bind_sql_params(PDOStatement $statement, array $params): void
     }
 }
 
-function ri_parse_image_key(?string $key): ?array
-{
-    if ($key === null) {
-        return null;
-    }
-
-    $separator = strrpos($key, ':');
-    if ($separator === false) {
-        return null;
-    }
-
-    $folder = substr($key, 0, $separator);
-    $id = substr($key, $separator + 1);
-    if ($folder === '' || !ctype_digit($id)) {
-        return null;
-    }
-
-    return [
-        'folder' => $folder,
-        'id' => (int)$id,
-    ];
-}
-
 function ri_respond_random_item(array $item, array $config): void
 {
     $url = ri_public_url($item, $config);
@@ -348,7 +315,7 @@ function ri_handle_folder_random_request(array $segments, array $config, PDO $in
         ri_send_error(404, 'folder_not_found', 'Image folder is not configured.');
     }
 
-    ri_handle_random_database_request($folder, $folder, $index, $config, $baseDir);
+    ri_handle_random_database_request($folder, $index, $config, $baseDir);
 }
 
 function ri_is_indexed_asset_request(array $segments, array $config): bool
@@ -368,7 +335,7 @@ function ri_handle_indexed_asset_request(array $segments, array $config, PDO $in
 {
     $folder = $segments[0];
     [$id, $extension] = ri_parse_indexed_asset_name($segments[1]);
-    $item = ri_find_item_by_index($index, $config, $baseDir, $folder, $id, $extension);
+    $item = ri_find_item_by_index($index, $config, $baseDir, $folder, $id, $extension, true);
     if ($item === null) {
         ri_send_error(404, 'not_found', 'Image not found.');
     }
@@ -392,6 +359,10 @@ function ri_output_indexed_item(array $item, array $config): void
     }
 
     if ($item['sourceType'] === 'remote') {
+        if (!ri_is_safe_remote_url($item['originalUrl'], $config, true)) {
+            ri_send_error(404, 'not_found', 'Image not found.');
+        }
+
         ri_security_headers();
         header('Cache-Control: public, max-age=86400');
         header('Location: ' . $item['originalUrl'], true, 302);

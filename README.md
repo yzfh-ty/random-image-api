@@ -9,6 +9,7 @@ A PHP 8.2 + SQLite random image API. It randomly serves images from configured l
 - `GET /`: randomly selects from all configured categories.
 - `GET /:folder`: randomly selects from one configured category.
 - `GET /:folder/:id.ext`: serves an indexed short image URL. Local images are streamed by the server, while remote TXT links return a 302 redirect to the original URL.
+- `GET /_health`: returns a compact JSON health check for monitoring.
 - `GET /?json=1`: returns JSON with a short image URL under the current domain.
 - Opening `/` or `/erciyuan` directly in a browser returns an HTML image viewer page. Refreshing the page picks a new image.
 - Requests from `<img>` tags or CSS backgrounds receive a 302 redirect to the short image URL.
@@ -50,7 +51,7 @@ RI_DEFAULT_MODE=redirect
 RI_HTTP_PROXY=
 ```
 
-Supported variables are listed in `.env.example`. By default, only `localhost`, `127.0.0.1`, and `[::1]` are accepted as request hosts; set `RI_ALLOWED_HOSTS` to your production domain names before deploying. Set `RI_TRUST_PROXY=true` only when the app is behind a trusted reverse proxy.
+Supported variables are listed in `.env.example`; `.env.production.example` highlights production-oriented values. By default, only `localhost`, `127.0.0.1`, and `[::1]` are accepted as request hosts; set `RI_ALLOWED_HOSTS` to your production domain names before deploying. Set `RI_TRUST_PROXY=true` only when the app is behind a trusted reverse proxy.
 
 ### Configuration Reference
 
@@ -66,7 +67,7 @@ Supported variables are listed in `.env.example`. By default, only `localhost`, 
 | `RI_TRUST_PROXY` | Trust `X-Forwarded-Proto` and `X-Forwarded-Host` from a reverse proxy. | `false` |
 | `RI_ADMIN_ENABLED` | Enable read-only admin status endpoints. | `false` |
 | `RI_ADMIN_PREFIX` | Admin API route prefix. This prefix is reserved. | `/_api` |
-| `RI_ADMIN_TOKEN` | Bearer token required when admin API is enabled. | empty |
+| `RI_ADMIN_TOKEN` | Bearer token required when admin API is enabled; must be at least 32 characters. | empty |
 | `RI_ADMIN_ALLOW_QUERY_TOKEN` | Allow admin token in `?token=`. Prefer Bearer tokens. | `false` |
 | `RI_INDEX_DATABASE` | SQLite index database path. | `.runtime/image-index.sqlite` |
 | `RI_INDEX_LOCK` | File lock path used to prevent concurrent index rebuilds. | `.runtime/index.lock` |
@@ -75,13 +76,16 @@ Supported variables are listed in `.env.example`. By default, only `localhost`, 
 | `RI_INDEX_LOG_BACKUPS` | Number of rotated index log backups to keep. | `3` |
 | `RI_IMAGE_EXTENSIONS` | Allowed local image extensions. SVG is ignored unless explicitly enabled. | `.jpg,.jpeg,.png,.gif,.webp,.avif,.bmp` |
 | `RI_ALLOW_SVG` | Allow SVG indexing/output. Keep disabled unless needed. | `false` |
+| `RI_MAX_IMAGE_BYTES` | Maximum local image file size; `0` disables the limit. | `52428800` |
+| `RI_REMOTE_REQUIRE_CHECKED` | Require a recent successful `check-links` result before remote short URLs redirect. | `true` |
+| `RI_REMOTE_CHECK_MAX_AGE` | Maximum age in seconds for a successful remote link check. | `86400` |
 | `RI_HTTP_PROXY` | Optional HTTP proxy used only for remote link checks. | `http://127.0.0.1:10808` |
 | `RI_LINKCHECK_TIMEOUT` | Timeout in seconds for each remote link check. | `5` |
 | `RI_LINKCHECK_CONCURRENCY` | Maximum concurrent remote link checks when cURL is available. | `4` |
 | `RI_LINKCHECK_USER_AGENT` | User-Agent sent during remote link checks. | `random-image-api/1.0` |
 | `RI_LINKCHECK_VERIFY_TLS` | Verify TLS certificates for HTTPS remote links. | `true` |
 | `RI_LINKCHECK_BIND_RESOLVED_IP` | Bind cURL checks to the public IP resolved during validation when no proxy is used. | `true` |
-| `RI_LINKCHECK_ALLOWED_HOSTS` | Optional allowlist for remote image hosts. Wildcards like `*.example.org` are supported. | empty |
+| `RI_LINKCHECK_ALLOWED_HOSTS` | Required allowlist for remote image hosts. Remote links are disabled when empty. Wildcards like `*.example.org` are supported. | empty |
 | `RI_SENDFILE_MODE` | Local image output mode: `php`, `x-sendfile`, or `x-accel`. | `php` |
 | `RI_X_ACCEL_PREFIX` | Internal Nginx location prefix required for `x-accel`. | empty |
 
@@ -125,7 +129,7 @@ Aliases are also accepted: `desktop`, `landscape`, `horizontal` map to `pc`; `ph
 
 When `type` is not provided, browser requests are auto-detected from Client Hints or User-Agent. This usually works for CSS background calls too, because browsers still send a User-Agent. Use `?type=pc` or `?type=mobile` when you need an exact background orientation regardless of the device detection result.
 
-Remote links from `links.txt` are indexed as `unknown`, because the service does not download remote images to inspect their dimensions. They are included when no type filter is active, and excluded when requesting `pc` or `mobile`.
+Remote links from `links.txt` are indexed as `unknown`, because the service does not download remote images to inspect their dimensions. Remote links are disabled unless their host is listed in `RI_LINKCHECK_ALLOWED_HOSTS`, and remote short URLs only redirect after `check-links` records a recent successful check. They are included when no type filter is active, and excluded when requesting `pc` or `mobile`.
 
 ## Indexing
 
@@ -180,8 +184,16 @@ D:\phpstudy_pro\Extensions\php\php8.2.9nts\php.exe -n -d extension_dir=D:\phpstu
 ```
 
 Set `RI_HTTP_PROXY` only when the current network needs a proxy. `RI_LINKCHECK_VERIFY_TLS=0` is only recommended for local testing; keep TLS verification enabled in production.
-`RI_LINKCHECK_CONCURRENCY` defaults to `4` and uses cURL multi when the cURL extension is enabled; otherwise link checks fall back to sequential stream requests.
-`RI_LINKCHECK_BIND_RESOLVED_IP=true` makes cURL checks bind requests to the public IP resolved during validation, reducing DNS rebinding risk when no proxy is used. For production, set `RI_LINKCHECK_ALLOWED_HOSTS` to the image domains you trust.
+`RI_LINKCHECK_CONCURRENCY` defaults to `4` and uses cURL multi when the cURL extension is enabled.
+When `RI_LINKCHECK_BIND_RESOLVED_IP=true` and no proxy is configured, remote checks require cURL so requests can be bound to the public IP validated earlier.
+`RI_LINKCHECK_BIND_RESOLVED_IP=true` makes cURL checks bind requests to the public IP resolved during validation, reducing DNS rebinding risk when no proxy is used. Set `RI_LINKCHECK_ALLOWED_HOSTS` to the image domains you trust before indexing remote links, then run `check-links`.
+`status --json` and the admin status API expose remote link visibility fields including indexed, checked, unchecked, stale, and serviceable counts.
+
+Generate a strong admin token:
+
+```powershell
+D:\phpstudy_pro\Extensions\php\php8.2.9nts\php.exe -n bin\console.php generate-token
+```
 
 ## Local Run
 
@@ -216,13 +228,13 @@ The `/_api` admin endpoints are disabled by default. To enable them:
 
 ```dotenv
 RI_ADMIN_ENABLED=true
-RI_ADMIN_TOKEN=replace-with-a-long-random-token
+RI_ADMIN_TOKEN=paste-generated-token-here
 ```
 
 Use a Bearer token:
 
 ```powershell
-curl.exe -H "Authorization: Bearer replace-with-a-long-random-token" http://127.0.0.1:3000/_api/index
+curl.exe -H "Authorization: Bearer <generated-token>" http://127.0.0.1:3000/_api/index
 ```
 
 `?token=` is not accepted by default, so tokens do not appear in browser history or access logs. Set `RI_ADMIN_ALLOW_QUERY_TOKEN=true` only if you explicitly need query tokens.
@@ -237,9 +249,9 @@ curl.exe -H "Authorization: Bearer replace-with-a-long-random-token" http://127.
 - Paths reject `../`, backslashes, null bytes, and ASCII control characters.
 - Short URLs do not expose original file names.
 - SVG is disabled by default to avoid scriptable SVG risks; if explicitly enabled, local SVG files are sent as attachments with a restrictive CSP.
-- Local image output verifies the resolved real path remains inside the category directory and rejects symlinks.
-- TXT remote links reject localhost, private IPs, reserved addresses, and cloud metadata hosts. Redirect targets are checked too.
-- `RI_LINKCHECK_ALLOWED_HOSTS` can further restrict allowed remote image domains.
+- Local image output verifies the resolved real path remains inside the category directory, rejects symlinks, enforces `RI_MAX_IMAGE_BYTES`, and rechecks that non-SVG files are readable images.
+- TXT remote links require `RI_LINKCHECK_ALLOWED_HOSTS`, reject localhost, private IPs, reserved addresses, unresolved hosts, and cloud metadata hosts. Redirect targets are checked too.
+- Remote short URLs require a recent successful `check-links` result by default.
 
 ## Scheduled Indexing
 

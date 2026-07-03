@@ -314,7 +314,7 @@ function ri_scan_category_for_index(
         }
 
         if (in_array($entry, $config['linkFiles'], true)) {
-            ri_index_remote_link_file($config, $folder, $entryPath, $index);
+            ri_index_remote_link_file($config, $folder, $entryPath, $index, $warnings);
             continue;
         }
 
@@ -387,10 +387,39 @@ function ri_index_local_image_file(
         return;
     }
 
+    $validationError = ri_local_image_validation_error($config, $entryPath, $extension);
+    if ($validationError !== null) {
+        $warnings[] = $validationError . ': ' . $folder . '/' . ri_to_url_path(ri_relative_path($folderPath, $entryPath));
+        return;
+    }
+
     $orientation = ri_detect_local_image_type($entryPath);
     $relativePath = ri_to_url_path(ri_relative_path($folderPath, $entryPath));
     $extensionWithoutDot = strtolower(pathinfo($entryPath, PATHINFO_EXTENSION));
     ri_remember_index_image($index, $folder, 'local', $relativePath, $extensionWithoutDot, $relativePath, $orientation);
+}
+
+function ri_local_image_validation_error(array $config, string $path, string $extension): ?string
+{
+    $size = filesize($path);
+    if ($size === false) {
+        return 'Cannot read image size';
+    }
+
+    $maxBytes = (int)($config['maxImageBytes'] ?? 0);
+    if ($maxBytes > 0 && $size > $maxBytes) {
+        return 'Image exceeds RI_MAX_IMAGE_BYTES';
+    }
+
+    if ($extension === '.svg') {
+        return null;
+    }
+
+    if (!is_array(@getimagesize($path))) {
+        return 'File content is not a readable image';
+    }
+
+    return null;
 }
 
 function ri_organize_local_image_file(array $config, string $folderPath, string $entryPath, array &$warnings): void
@@ -455,8 +484,13 @@ function ri_available_move_target(string $targetPath): string
     return $candidate;
 }
 
-function ri_index_remote_link_file(array $config, string $folder, string $filePath, PDO $index): void
+function ri_index_remote_link_file(array $config, string $folder, string $filePath, PDO $index, array &$warnings): void
 {
+    if ($config['linkCheck']['allowedHosts'] === []) {
+        $warnings[] = 'Skipped remote links because RI_LINKCHECK_ALLOWED_HOSTS is empty: ' . $folder . '/' . basename($filePath);
+        return;
+    }
+
     $seen = [];
     $lines = file($filePath, FILE_IGNORE_NEW_LINES);
     if ($lines === false) {
@@ -465,7 +499,12 @@ function ri_index_remote_link_file(array $config, string $folder, string $filePa
 
     foreach ($lines as $line) {
         $url = trim($line);
-        if ($url === '' || str_starts_with($url, '#') || isset($seen[$url]) || !ri_is_safe_remote_url($url, $config, false)) {
+        if ($url === '' || str_starts_with($url, '#') || isset($seen[$url])) {
+            continue;
+        }
+
+        if (!ri_is_safe_remote_url($url, $config, true)) {
+            $warnings[] = 'Skipped unsafe remote link: ' . $folder . '/' . basename($filePath);
             continue;
         }
 

@@ -39,6 +39,12 @@ function ri_cli_main(string $baseDir, array $argv): int
             return 0;
         }
 
+        if ($command === 'generate-token') {
+            $token = ri_generate_admin_token();
+            ri_cli_output(['token' => $token], $options['json'], 'ri_cli_print_generated_token');
+            return 0;
+        }
+
         if ($command === 'help' || $command === '--help' || $command === '-h') {
             ri_cli_print_usage($argv[0] ?? 'bin/console.php');
             return 0;
@@ -61,6 +67,7 @@ function ri_cli_print_usage(string $script): void
     echo "  php {$script} config [--json]         Show effective runtime configuration.\n";
     echo "  php {$script} doctor [--json]         Check PHP extensions, paths, and folders.\n";
     echo "  php {$script} check-links             Check remote links from links.txt.\n";
+    echo "  php {$script} generate-token          Generate a strong admin bearer token.\n";
 }
 
 function ri_cli_options(array $argv): array
@@ -95,6 +102,11 @@ function ri_cli_output(array $payload, bool $json, callable $printer): void
     $printer($payload);
 }
 
+function ri_generate_admin_token(): string
+{
+    return rtrim(strtr(base64_encode(random_bytes(48)), '+/', '-_'), '=');
+}
+
 function ri_cli_config_snapshot(array $config, string $baseDir): array
 {
     $linkCheck = $config['linkCheck'];
@@ -122,8 +134,10 @@ function ri_cli_config_snapshot(array $config, string $baseDir): array
         'images' => [
             'extensions' => $config['imageExtensions'],
             'allowSvg' => $config['allowSvg'],
+            'maxImageBytes' => $config['maxImageBytes'],
             'defaultMode' => $config['defaultMode'],
         ],
+        'remote' => $config['remote'],
         'linkCheck' => $linkCheck,
         'sendfile' => $config['sendfile'],
         'resolvedPaths' => [
@@ -153,7 +167,14 @@ function ri_cli_doctor(string $baseDir): array
         'PDO SQLite driver is available.'
     );
     ri_cli_add_check($checks, 'image_size', function_exists('getimagesize') ? 'ok' : 'fail', 'getimagesize is available.');
-    ri_cli_add_check($checks, 'curl_extension', function_exists('curl_init') ? 'ok' : 'warn', 'cURL is optional; stream fallback is used when missing.');
+    ri_cli_add_check(
+        $checks,
+        'curl_extension',
+        function_exists('curl_init') ? 'ok' : 'warn',
+        function_exists('curl_init')
+            ? 'cURL is available for remote link checks.'
+            : 'cURL is missing; remote link checks may require a proxy or disabled resolved-IP binding.'
+    );
 
     try {
         $config = ri_load_config($baseDir);
@@ -164,17 +185,18 @@ function ri_cli_doctor(string $baseDir): array
     }
 
     if ($config['linkCheck']['concurrency'] > 1 && !function_exists('curl_multi_init')) {
-        ri_cli_add_check($checks, 'linkcheck_concurrency', 'warn', 'Concurrent link checks require cURL; sequential fallback will be used.');
+        ri_cli_add_check($checks, 'linkcheck_concurrency', 'warn', 'Concurrent link checks require cURL multi; sequential checks will be used when remote requests are allowed.');
     }
     if ($config['linkCheck']['allowedHosts'] === []) {
-        ri_cli_add_check($checks, 'remote_allowed_hosts', 'warn', 'Remote link host allowlist is empty; any public host in links.txt can be checked.');
+        ri_cli_add_check($checks, 'remote_allowed_hosts', 'warn', 'Remote links are disabled until RI_LINKCHECK_ALLOWED_HOSTS is configured.');
     } else {
         ri_cli_add_check($checks, 'remote_allowed_hosts', 'ok', 'Remote link host allowlist is configured.');
     }
     if (!($config['linkCheck']['bindResolvedIp'] ?? true)) {
         ri_cli_add_check($checks, 'remote_ip_binding', 'warn', 'Resolved-IP binding is disabled for remote link checks.');
-    } elseif (!function_exists('curl_init')) {
-        ri_cli_add_check($checks, 'remote_ip_binding', 'warn', 'Resolved-IP binding requires cURL; stream fallback cannot bind DNS results.');
+    } elseif (!function_exists('curl_init') && $config['linkCheck']['proxy'] === '') {
+        $status = $config['linkCheck']['allowedHosts'] === [] ? 'warn' : 'fail';
+        ri_cli_add_check($checks, 'remote_ip_binding', $status, 'Remote link checks require cURL when resolved-IP binding is enabled without a proxy.');
     } elseif ($config['linkCheck']['proxy'] !== '') {
         ri_cli_add_check($checks, 'remote_ip_binding', 'warn', 'HTTP proxy is configured; upstream DNS resolution is handled by the proxy.');
     } else {
@@ -184,6 +206,9 @@ function ri_cli_doctor(string $baseDir): array
         ri_cli_add_check($checks, 'allowed_hosts', 'warn', 'Only local development hosts are allowed; set RI_ALLOWED_HOSTS for production domains.');
     } else {
         ri_cli_add_check($checks, 'allowed_hosts', 'ok', 'Allowed hosts are configured.');
+    }
+    if ($config['server']['host'] === '0.0.0.0') {
+        ri_cli_add_check($checks, 'builtin_server_exposure', 'warn', 'Do not expose the PHP built-in server directly to the public Internet; place it behind a reverse proxy or use PHP-FPM.');
     }
 
     $imageRoot = ri_resolve_path($baseDir, $config['imageRoot']);
@@ -317,9 +342,13 @@ function ri_cli_print_status(array $status): void
     }
     echo 'Total: ' . $status['total'] . ' images, local: ' . $status['localCount'] . ', remote: ' . $status['remoteCount'] . "\n";
     echo 'Types: pc ' . $status['pcCount'] . ', mobile ' . $status['mobileCount'] . "\n";
-    echo 'Remote link checks: ' . $status['remoteLinkChecks']['total'] . ' checked, '
+    echo 'Remote links: ' . $status['remoteLinkChecks']['indexed'] . ' indexed, '
+        . $status['remoteLinkChecks']['serviceable'] . ' serviceable, '
+        . $status['remoteLinkChecks']['checked'] . ' checked, '
         . $status['remoteLinkChecks']['ok'] . ' ok, '
-        . $status['remoteLinkChecks']['failed'] . ' failed' . "\n";
+        . $status['remoteLinkChecks']['failed'] . ' failed, '
+        . $status['remoteLinkChecks']['unchecked'] . ' unchecked, '
+        . $status['remoteLinkChecks']['stale'] . ' stale' . "\n";
 
     foreach ($status['folders'] as $folder) {
         echo '- ' . $folder['folder'] . ': ' . $folder['total']
@@ -343,4 +372,9 @@ function ri_cli_print_check_links_summary(array $result): void
             echo '  ' . $item['error'] . "\n";
         }
     }
+}
+
+function ri_cli_print_generated_token(array $result): void
+{
+    echo $result['token'] . "\n";
 }

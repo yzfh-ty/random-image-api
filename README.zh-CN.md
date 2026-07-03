@@ -9,6 +9,7 @@
 - `GET /`：从所有已配置分类中随机。
 - `GET /:folder`：从指定分类中随机。
 - `GET /:folder/:id.ext`：访问索引生成的短图片链接；本地图片直接输出，TXT 远程链接 302 跳转到原始 URL。
+- `GET /_health`：返回适合监控使用的简洁健康检查 JSON。
 - `GET /?json=1`：返回当前域名下的短图片链接 JSON。
 - 浏览器直接打开 `/`、`/erciyuan` 时返回一个展示图片的 HTML 页面，刷新会重新随机。
 - 作为 `<img>` 或 CSS 背景请求时，接口返回 302 到短图片链接。
@@ -50,7 +51,7 @@ RI_DEFAULT_MODE=redirect
 RI_HTTP_PROXY=
 ```
 
-完整变量列表见 `.env.example`。默认只接受 `localhost`、`127.0.0.1` 和 `[::1]` 作为请求 Host；部署到生产域名之前必须把域名写入 `RI_ALLOWED_HOSTS`。只有服务位于可信反向代理后面，才设置 `RI_TRUST_PROXY=true`。
+完整变量列表见 `.env.example`；`.env.production.example` 列出了偏生产环境的配置模板。默认只接受 `localhost`、`127.0.0.1` 和 `[::1]` 作为请求 Host；部署到生产域名之前必须把域名写入 `RI_ALLOWED_HOSTS`。只有服务位于可信反向代理后面，才设置 `RI_TRUST_PROXY=true`。
 
 ### 配置变量说明
 
@@ -66,7 +67,7 @@ RI_HTTP_PROXY=
 | `RI_TRUST_PROXY` | 是否信任反向代理传入的 `X-Forwarded-Proto` 和 `X-Forwarded-Host`。 | `false` |
 | `RI_ADMIN_ENABLED` | 是否启用只读管理状态接口。 | `false` |
 | `RI_ADMIN_PREFIX` | 管理接口路由前缀，此前缀也会成为保留分类名。 | `/_api` |
-| `RI_ADMIN_TOKEN` | 管理接口启用后要求的 Bearer Token。 | 空 |
+| `RI_ADMIN_TOKEN` | 管理接口启用后要求的 Bearer Token，至少 32 个字符。 | 空 |
 | `RI_ADMIN_ALLOW_QUERY_TOKEN` | 是否允许用 `?token=` 传管理 token，优先使用 Bearer Token。 | `false` |
 | `RI_INDEX_DATABASE` | SQLite 索引数据库路径。 | `.runtime/image-index.sqlite` |
 | `RI_INDEX_LOCK` | 索引文件锁路径，用于避免并发重建索引。 | `.runtime/index.lock` |
@@ -75,13 +76,16 @@ RI_HTTP_PROXY=
 | `RI_INDEX_LOG_BACKUPS` | 保留的索引日志轮转备份数量。 | `3` |
 | `RI_IMAGE_EXTENSIONS` | 允许索引的本地图片扩展名；SVG 需要额外开启。 | `.jpg,.jpeg,.png,.gif,.webp,.avif,.bmp` |
 | `RI_ALLOW_SVG` | 是否允许索引/输出 SVG；除非确实需要，否则保持关闭。 | `false` |
+| `RI_MAX_IMAGE_BYTES` | 本地单个图片文件最大字节数；`0` 表示不限制。 | `52428800` |
+| `RI_REMOTE_REQUIRE_CHECKED` | 远程短链接跳转前是否要求最近一次 `check-links` 成功。 | `true` |
+| `RI_REMOTE_CHECK_MAX_AGE` | 远程链接成功检查结果的最大有效期，单位秒。 | `86400` |
 | `RI_HTTP_PROXY` | 远程链接检查时使用的可选 HTTP 代理。 | `http://127.0.0.1:10808` |
 | `RI_LINKCHECK_TIMEOUT` | 单个远程链接检查超时时间，单位秒。 | `5` |
 | `RI_LINKCHECK_CONCURRENCY` | cURL 可用时远程链接检查的最大并发数。 | `4` |
 | `RI_LINKCHECK_USER_AGENT` | 远程链接检查时发送的 User-Agent。 | `random-image-api/1.0` |
 | `RI_LINKCHECK_VERIFY_TLS` | 检查 HTTPS 远程链接时是否校验证书。 | `true` |
 | `RI_LINKCHECK_BIND_RESOLVED_IP` | 不使用代理时，cURL 检查是否绑定到校验阶段解析出的公网 IP。 | `true` |
-| `RI_LINKCHECK_ALLOWED_HOSTS` | 远程图片域名白名单，可使用 `*.example.org` 这类通配符。 | 空 |
+| `RI_LINKCHECK_ALLOWED_HOSTS` | 远程图片域名白名单；为空时远程链接禁用，可使用 `*.example.org` 这类通配符。 | 空 |
 | `RI_SENDFILE_MODE` | 本地图片输出模式：`php`、`x-sendfile` 或 `x-accel`。 | `php` |
 | `RI_X_ACCEL_PREFIX` | 使用 `x-accel` 时需要配置的 Nginx 内部 location 前缀。 | 空 |
 
@@ -125,7 +129,7 @@ images/
 
 不传 `type` 时，浏览器请求会根据 Client Hints 或 User-Agent 自动判断。作为 CSS 背景调用时，浏览器通常也会带 User-Agent，所以多数情况下可以自动适配；如果你想强制背景方向，建议显式使用 `?type=pc` 或 `?type=mobile`。
 
-`links.txt` 里的远程链接默认记为 `unknown`，因为服务不会下载远程图片来读取尺寸。不带类型过滤时会参与随机；请求 `pc` 或 `mobile` 时会被排除。
+`links.txt` 里的远程链接默认记为 `unknown`，因为服务不会下载远程图片来读取尺寸。远程链接必须先把域名写入 `RI_LINKCHECK_ALLOWED_HOSTS`，且短链接只有在 `check-links` 记录最近一次成功检查后才会跳转。不带类型过滤时会参与随机；请求 `pc` 或 `mobile` 时会被排除。
 
 ## 索引
 
@@ -180,8 +184,16 @@ D:\phpstudy_pro\Extensions\php\php8.2.9nts\php.exe -n -d extension_dir=D:\phpstu
 ```
 
 `RI_HTTP_PROXY` 只在当前网络需要代理时设置。`RI_LINKCHECK_VERIFY_TLS=0` 只建议本地测试使用，生产环境保持 TLS 校验开启。
-`RI_LINKCHECK_CONCURRENCY` 默认是 `4`，启用 cURL 扩展时使用 cURL multi 并发检查；未启用 cURL 时会自动退回串行 stream 请求。
-`RI_LINKCHECK_BIND_RESOLVED_IP=true` 会让 cURL 检查绑定到校验阶段解析出的公网 IP，在不走代理时降低 DNS rebinding 风险。生产环境建议把可信图片域名写入 `RI_LINKCHECK_ALLOWED_HOSTS`。
+`RI_LINKCHECK_CONCURRENCY` 默认是 `4`，启用 cURL 扩展时使用 cURL multi 并发检查。
+当 `RI_LINKCHECK_BIND_RESOLVED_IP=true` 且未配置代理时，远程检查要求启用 cURL，以便把请求绑定到前一步校验过的公网 IP。
+`RI_LINKCHECK_BIND_RESOLVED_IP=true` 会让 cURL 检查绑定到校验阶段解析出的公网 IP，在不走代理时降低 DNS rebinding 风险。索引远程链接前，先把可信图片域名写入 `RI_LINKCHECK_ALLOWED_HOSTS`，然后执行 `check-links`。
+`status --json` 和管理状态接口会展示远程链接状态字段，包括 indexed、checked、unchecked、stale 和 serviceable 等数量。
+
+生成强管理 token：
+
+```powershell
+D:\phpstudy_pro\Extensions\php\php8.2.9nts\php.exe -n bin\console.php generate-token
+```
 
 ## 本地运行
 
@@ -216,13 +228,13 @@ docker run --rm -p 3000:3000 --env-file .env -v ${PWD}/images:/app/images -v ${P
 
 ```dotenv
 RI_ADMIN_ENABLED=true
-RI_ADMIN_TOKEN=replace-with-a-long-random-token
+RI_ADMIN_TOKEN=paste-generated-token-here
 ```
 
 请求时使用 Bearer Token：
 
 ```powershell
-curl.exe -H "Authorization: Bearer replace-with-a-long-random-token" http://127.0.0.1:3000/_api/index
+curl.exe -H "Authorization: Bearer <generated-token>" http://127.0.0.1:3000/_api/index
 ```
 
 默认不接受 `?token=`，避免 token 出现在浏览器历史或访问日志中。确实需要时可设置 `RI_ADMIN_ALLOW_QUERY_TOKEN=true`。
@@ -237,9 +249,9 @@ curl.exe -H "Authorization: Bearer replace-with-a-long-random-token" http://127.
 - 路径会拒绝 `../`、反斜杠、空字节和 ASCII 控制字符。
 - 短链接不暴露原始文件名。
 - SVG 默认禁用，避免脚本型 SVG 风险；如果显式启用，本地 SVG 会按附件输出并附加严格 CSP。
-- 本地输出前会再次校验真实路径仍在分类目录内，并拒绝符号链接。
-- TXT 远程链接会拒绝 `localhost`、内网 IP、保留地址和云 metadata 主机；跳转检测也会校验重定向目标。
-- 远程链接可用 `RI_LINKCHECK_ALLOWED_HOSTS` 进一步限制允许的域名。
+- 本地输出前会再次校验真实路径仍在分类目录内，拒绝符号链接，执行 `RI_MAX_IMAGE_BYTES` 限制，并重新确认非 SVG 文件是可读取图片。
+- TXT 远程链接必须配置 `RI_LINKCHECK_ALLOWED_HOSTS`，并会拒绝 `localhost`、内网 IP、保留地址、无法解析的域名和云 metadata 主机；跳转检测也会校验重定向目标。
+- 远程短链接默认要求最近一次 `check-links` 成功。
 
 ## 定时索引
 

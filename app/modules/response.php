@@ -2,11 +2,6 @@
 
 declare(strict_types=1);
 
-function ri_image_key(array $item): string
-{
-    return $item['folder'] . ':' . $item['id'];
-}
-
 function ri_source_filter(): ?string
 {
     $source = $_GET['source'] ?? null;
@@ -30,6 +25,10 @@ function ri_output_local_image(array $item, array $config): void
     $mtime = filemtime($realPath);
     $size = filesize($realPath);
     if ($mtime === false || $size === false) {
+        ri_send_error(404, 'not_found', 'Image not found.');
+    }
+
+    if (ri_local_image_validation_error($config, $realPath, '.' . $item['extension']) !== null) {
         ri_send_error(404, 'not_found', 'Image not found.');
     }
 
@@ -192,29 +191,4 @@ function ri_enforce_request_method(): void
 
     header('Allow: GET, HEAD');
     ri_send_error(405, 'method_not_allowed', 'Only GET and HEAD requests are allowed.');
-}
-
-function ri_start_session(?array $config = null): void
-{
-    if (session_status() === PHP_SESSION_NONE) {
-        session_start([
-            'cookie_httponly' => true,
-            'cookie_samesite' => 'Lax',
-            'cookie_secure' => ri_is_secure_request($config),
-            'use_strict_mode' => true,
-        ]);
-    }
-}
-
-function ri_is_secure_request(?array $config = null): bool
-{
-    if (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') {
-        return true;
-    }
-
-    if (($config['server']['trustProxy'] ?? false) === true) {
-        return ri_first_header('HTTP_X_FORWARDED_PROTO') === 'https';
-    }
-
-    return false;
 }

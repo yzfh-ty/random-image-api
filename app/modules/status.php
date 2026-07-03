@@ -31,7 +31,7 @@ function ri_index_status(PDO $index, array $config): array
         'remoteCount' => $remoteCount,
         'pcCount' => $pcCount,
         'mobileCount' => $mobileCount,
-        'remoteLinkChecks' => ri_remote_link_check_status($index),
+        'remoteLinkChecks' => ri_remote_link_check_status($index, $config),
         'folders' => $folders,
     ];
 }
@@ -44,21 +44,42 @@ function ri_nullable_int(?string $value): ?int
     return (int)$value;
 }
 
-function ri_remote_link_check_status(PDO $index): array
+function ri_remote_link_check_status(PDO $index, array $config): array
 {
-    $row = $index->query(
+    $cutoff = gmdate('c', time() - (int)$config['remote']['checkMaxAgeSeconds']);
+    $statement = $index->prepare(
         'SELECT
-            COUNT(*) AS total,
-            SUM(CASE WHEN ok = 1 THEN 1 ELSE 0 END) AS ok_count,
-            SUM(CASE WHEN ok = 0 THEN 1 ELSE 0 END) AS failed_count,
-            MAX(checked_at) AS last_checked_at
-         FROM remote_link_checks'
-    )->fetch(PDO::FETCH_ASSOC) ?: [];
+            COUNT(i.id) AS indexed_count,
+            SUM(CASE WHEN r.image_id IS NOT NULL THEN 1 ELSE 0 END) AS checked_count,
+            SUM(CASE WHEN r.ok = 1 THEN 1 ELSE 0 END) AS ok_count,
+            SUM(CASE WHEN r.ok = 0 THEN 1 ELSE 0 END) AS failed_count,
+            SUM(CASE WHEN r.image_id IS NULL THEN 1 ELSE 0 END) AS unchecked_count,
+            SUM(CASE WHEN r.ok = 1 AND r.checked_at < :cutoff THEN 1 ELSE 0 END) AS stale_count,
+            SUM(CASE WHEN r.ok = 1 AND r.checked_at >= :cutoff THEN 1 ELSE 0 END) AS fresh_ok_count,
+            MAX(r.checked_at) AS last_checked_at
+         FROM image_index AS i
+         LEFT JOIN remote_link_checks AS r
+           ON r.folder = i.folder
+          AND r.image_id = i.id
+          AND r.url = i.target
+         WHERE i.source_type = "remote"'
+    );
+    $statement->execute([':cutoff' => $cutoff]);
+    $row = $statement->fetch(PDO::FETCH_ASSOC) ?: [];
+    $indexed = (int)($row['indexed_count'] ?? 0);
+    $freshOk = (int)($row['fresh_ok_count'] ?? 0);
 
     return [
-        'total' => (int)($row['total'] ?? 0),
+        'total' => (int)($row['checked_count'] ?? 0),
+        'indexed' => $indexed,
+        'checked' => (int)($row['checked_count'] ?? 0),
         'ok' => (int)($row['ok_count'] ?? 0),
         'failed' => (int)($row['failed_count'] ?? 0),
+        'unchecked' => (int)($row['unchecked_count'] ?? 0),
+        'stale' => (int)($row['stale_count'] ?? 0),
+        'serviceable' => ($config['remote']['requireChecked'] ?? true) ? $freshOk : $indexed,
+        'requiresCheck' => (bool)($config['remote']['requireChecked'] ?? true),
+        'checkMaxAgeSeconds' => (int)$config['remote']['checkMaxAgeSeconds'],
         'lastCheckedAt' => $row['last_checked_at'] ?? null,
     ];
 }

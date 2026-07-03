@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-const RI_RESERVED_FOLDERS = ['_api', '_assets', '_remote'];
+const RI_RESERVED_FOLDERS = ['_api', '_assets', '_remote', '_health'];
 const RI_DEFAULT_ALLOWED_HOSTS = ['localhost', '127.0.0.1', '[::1]'];
 const RI_DEFAULT_IMAGE_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.avif', '.bmp'];
 const RI_DEFAULT_REMOTE_EXTENSION = 'jpg';
@@ -17,6 +17,8 @@ require __DIR__ . '/modules/support.php';
 require __DIR__ . '/modules/image_type.php';
 require __DIR__ . '/modules/config.php';
 require __DIR__ . '/modules/database.php';
+require __DIR__ . '/modules/remote_validation.php';
+require __DIR__ . '/modules/remote_client.php';
 require __DIR__ . '/modules/indexer.php';
 require __DIR__ . '/modules/status.php';
 require __DIR__ . '/modules/remote.php';

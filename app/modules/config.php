@@ -32,7 +32,12 @@ function ri_normalize_config(): array
         'indexLogBackups' => ri_config_int_with_env('RI_INDEX_LOG_BACKUPS', 3),
         'imageExtensions' => ri_config_list_with_env('RI_IMAGE_EXTENSIONS', RI_DEFAULT_IMAGE_EXTENSIONS),
         'allowSvg' => ri_config_bool_with_env('RI_ALLOW_SVG', false),
+        'maxImageBytes' => ri_config_int_with_env('RI_MAX_IMAGE_BYTES', 52428800),
         'defaultMode' => ri_config_string_with_env('RI_DEFAULT_MODE', 'redirect'),
+        'remote' => [
+            'requireChecked' => ri_config_bool_with_env('RI_REMOTE_REQUIRE_CHECKED', true),
+            'checkMaxAgeSeconds' => ri_config_int_with_env('RI_REMOTE_CHECK_MAX_AGE', 86400),
+        ],
         'linkCheck' => [
             'timeoutSeconds' => ri_config_int_with_env('RI_LINKCHECK_TIMEOUT', 5),
             'concurrency' => ri_config_int_with_env('RI_LINKCHECK_CONCURRENCY', 4),
@@ -52,6 +57,10 @@ function ri_normalize_config(): array
         ri_send_error(500, 'invalid_config', 'At least one folder must be configured.');
     }
 
+    if ($config['server']['port'] < 1 || $config['server']['port'] > 65535) {
+        ri_send_error(500, 'invalid_config', 'RI_SERVER_PORT must be between 1 and 65535.');
+    }
+
     if ($config['server']['allowedHosts'] === []) {
         $config['server']['allowedHosts'] = RI_DEFAULT_ALLOWED_HOSTS;
     }
@@ -66,8 +75,8 @@ function ri_normalize_config(): array
         ri_send_error(500, 'invalid_config', 'Invalid route prefix: adminPrefix.');
     }
 
-    if ($config['adminEnabled'] && $config['adminToken'] === '') {
-        ri_send_error(500, 'invalid_config', 'adminToken or RI_ADMIN_TOKEN is required when adminEnabled is true.');
+    if ($config['adminEnabled'] && !ri_is_strong_admin_token($config['adminToken'])) {
+        ri_send_error(500, 'invalid_config', 'RI_ADMIN_TOKEN must be at least 32 characters and must not use the example token.');
     }
 
     $adminFolder = ltrim($config['adminPrefix'], '/');
@@ -108,6 +117,14 @@ function ri_normalize_config(): array
         ri_send_error(500, 'invalid_config', 'defaultMode must be redirect or json.');
     }
 
+    if ($config['maxImageBytes'] < 0 || $config['maxImageBytes'] > 1073741824) {
+        ri_send_error(500, 'invalid_config', 'RI_MAX_IMAGE_BYTES must be between 0 and 1073741824.');
+    }
+
+    if ($config['remote']['checkMaxAgeSeconds'] < 60 || $config['remote']['checkMaxAgeSeconds'] > 2592000) {
+        ri_send_error(500, 'invalid_config', 'RI_REMOTE_CHECK_MAX_AGE must be between 60 and 2592000.');
+    }
+
     if ($config['indexLogMaxBytes'] < 0 || $config['indexLogMaxBytes'] > 104857600) {
         ri_send_error(500, 'invalid_config', 'RI_INDEX_LOG_MAX_BYTES must be between 0 and 104857600.');
     }
@@ -138,6 +155,21 @@ function ri_normalize_config(): array
     }
 
     return $config;
+}
+
+function ri_is_strong_admin_token(string $token): bool
+{
+    $token = strtolower(trim($token));
+    if (strlen($token) < 32) {
+        return false;
+    }
+
+    $knownPlaceholders = [
+        'replace-with-a-long-random-token',
+        'replace-with-at-least-32-random-characters',
+    ];
+
+    return !in_array($token, $knownPlaceholders, true);
 }
 
 function ri_load_env_file(string $baseDir): void
@@ -237,10 +269,20 @@ function ri_config_int_with_env(string $envName, int $default): int
 {
     $envValue = ri_env_string($envName);
     if ($envValue !== null) {
-        return (int)$envValue;
+        return ri_parse_config_int($envValue, $envName);
     }
 
     return $default;
+}
+
+function ri_parse_config_int(string $value, string $name): int
+{
+    $value = trim($value);
+    if (preg_match('/^-?[0-9]+$/', $value) !== 1) {
+        ri_send_error(500, 'invalid_config', $name . ' must be an integer.');
+    }
+
+    return (int)$value;
 }
 
 function ri_config_list_with_env(string $envName, array $default): array
