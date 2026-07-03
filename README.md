@@ -148,6 +148,7 @@ D:\phpstudy_pro\Extensions\php\php8.2.9nts\php.exe -n -d extension_dir=D:\phpstu
 
 Set `RI_HTTP_PROXY` only when the current network needs a proxy. `RI_LINKCHECK_VERIFY_TLS=0` is only recommended for local testing; keep TLS verification enabled in production.
 `RI_LINKCHECK_CONCURRENCY` defaults to `4` and uses cURL multi when the cURL extension is enabled; otherwise link checks fall back to sequential stream requests.
+`RI_LINKCHECK_BIND_RESOLVED_IP=true` makes cURL checks bind requests to the public IP resolved during validation, reducing DNS rebinding risk when no proxy is used. For production, set `RI_LINKCHECK_ALLOWED_HOSTS` to the image domains you trust.
 
 ## Local Run
 

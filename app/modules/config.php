@@ -40,6 +40,7 @@ function ri_normalize_config(): array
             'proxy' => ri_config_string_with_env('RI_HTTP_PROXY', ''),
             'verifyTls' => ri_config_bool_with_env('RI_LINKCHECK_VERIFY_TLS', true),
             'allowedHosts' => ri_config_list_with_env('RI_LINKCHECK_ALLOWED_HOSTS', []),
+            'bindResolvedIp' => ri_config_bool_with_env('RI_LINKCHECK_BIND_RESOLVED_IP', true),
         ],
         'sendfile' => [
             'mode' => ri_config_string_with_env('RI_SENDFILE_MODE', 'php'),

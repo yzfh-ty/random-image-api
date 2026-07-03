@@ -166,6 +166,20 @@ function ri_cli_doctor(string $baseDir): array
     if ($config['linkCheck']['concurrency'] > 1 && !function_exists('curl_multi_init')) {
         ri_cli_add_check($checks, 'linkcheck_concurrency', 'warn', 'Concurrent link checks require cURL; sequential fallback will be used.');
     }
+    if ($config['linkCheck']['allowedHosts'] === []) {
+        ri_cli_add_check($checks, 'remote_allowed_hosts', 'warn', 'Remote link host allowlist is empty; any public host in links.txt can be checked.');
+    } else {
+        ri_cli_add_check($checks, 'remote_allowed_hosts', 'ok', 'Remote link host allowlist is configured.');
+    }
+    if (!($config['linkCheck']['bindResolvedIp'] ?? true)) {
+        ri_cli_add_check($checks, 'remote_ip_binding', 'warn', 'Resolved-IP binding is disabled for remote link checks.');
+    } elseif (!function_exists('curl_init')) {
+        ri_cli_add_check($checks, 'remote_ip_binding', 'warn', 'Resolved-IP binding requires cURL; stream fallback cannot bind DNS results.');
+    } elseif ($config['linkCheck']['proxy'] !== '') {
+        ri_cli_add_check($checks, 'remote_ip_binding', 'warn', 'HTTP proxy is configured; upstream DNS resolution is handled by the proxy.');
+    } else {
+        ri_cli_add_check($checks, 'remote_ip_binding', 'ok', 'Remote link checks bind cURL requests to resolved public IPs.');
+    }
     if ($config['server']['allowedHosts'] === RI_DEFAULT_ALLOWED_HOSTS) {
         ri_cli_add_check($checks, 'allowed_hosts', 'warn', 'Only local development hosts are allowed; set RI_ALLOWED_HOSTS for production domains.');
     } else {

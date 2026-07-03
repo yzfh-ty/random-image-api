@@ -148,6 +148,7 @@ D:\phpstudy_pro\Extensions\php\php8.2.9nts\php.exe -n -d extension_dir=D:\phpstu
 
 `RI_HTTP_PROXY` 只在当前网络需要代理时设置。`RI_LINKCHECK_VERIFY_TLS=0` 只建议本地测试使用，生产环境保持 TLS 校验开启。
 `RI_LINKCHECK_CONCURRENCY` 默认是 `4`，启用 cURL 扩展时使用 cURL multi 并发检查；未启用 cURL 时会自动退回串行 stream 请求。
+`RI_LINKCHECK_BIND_RESOLVED_IP=true` 会让 cURL 检查绑定到校验阶段解析出的公网 IP，在不走代理时降低 DNS rebinding 风险。生产环境建议把可信图片域名写入 `RI_LINKCHECK_ALLOWED_HOSTS`。
 
 ## 本地运行
 

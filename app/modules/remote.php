@@ -245,12 +245,13 @@ function ri_run_remote_curl_multi_requests(array $requests, array $config, int $
         while (count($active) < $concurrency && $pending !== []) {
             $request = array_shift($pending);
             $startedAt = microtime(true);
-            $handle = ri_create_remote_curl_handle($request['url'], $config, $request['method']);
+            $error = null;
+            $handle = ri_create_remote_curl_handle($request['url'], $config, $request['method'], $error);
             if ($handle === null) {
                 $responses[] = array_merge($request, [
                     'ok' => false,
                     'statusCode' => null,
-                    'error' => 'Cannot initialize cURL.',
+                    'error' => $error ?? 'Cannot initialize cURL.',
                     'durationMs' => 0,
                     'response' => null,
                 ]);
@@ -389,12 +390,13 @@ function ri_request_remote_url(string $url, array $config, string $method, int $
 function ri_request_remote_url_with_curl(string $url, array $config, string $method, int $redirectsRemaining): array
 {
     $startedAt = microtime(true);
-    $handle = ri_create_remote_curl_handle($url, $config, $method);
+    $error = null;
+    $handle = ri_create_remote_curl_handle($url, $config, $method, $error);
     if ($handle === null) {
         return [
             'ok' => false,
             'statusCode' => null,
-            'error' => 'Cannot initialize cURL.',
+            'error' => $error ?? 'Cannot initialize cURL.',
             'durationMs' => 0,
         ];
     }
@@ -428,10 +430,11 @@ function ri_request_remote_url_with_curl(string $url, array $config, string $met
     return ri_public_remote_result($result);
 }
 
-function ri_create_remote_curl_handle(string $url, array $config, string $method)
+function ri_create_remote_curl_handle(string $url, array $config, string $method, ?string &$error = null)
 {
     $handle = curl_init($url);
     if ($handle === false) {
+        $error = 'Cannot initialize cURL.';
         return null;
     }
 
@@ -456,7 +459,56 @@ function ri_create_remote_curl_handle(string $url, array $config, string $method
         curl_setopt($handle, CURLOPT_PROXY, $config['linkCheck']['proxy']);
     }
 
+    $resolveEntries = ri_curl_resolve_entries_for_url($url, $config, $error);
+    if ($error !== null) {
+        curl_close($handle);
+        return null;
+    }
+
+    if ($resolveEntries !== []) {
+        curl_setopt($handle, CURLOPT_RESOLVE, $resolveEntries);
+    }
+
     return $handle;
+}
+
+function ri_curl_resolve_entries_for_url(string $url, array $config, ?string &$error = null): array
+{
+    if (
+        !($config['linkCheck']['bindResolvedIp'] ?? true)
+        || $config['linkCheck']['proxy'] !== ''
+    ) {
+        return [];
+    }
+
+    $host = parse_url($url, PHP_URL_HOST);
+    $scheme = parse_url($url, PHP_URL_SCHEME);
+    if (!is_string($host) || !is_string($scheme)) {
+        $error = 'Remote URL is invalid.';
+        return [];
+    }
+
+    if (filter_var(trim($host, '[]'), FILTER_VALIDATE_IP) !== false) {
+        return [];
+    }
+
+    $port = parse_url($url, PHP_URL_PORT);
+    if (!is_int($port)) {
+        $port = strtolower($scheme) === 'https' ? 443 : 80;
+    }
+
+    $addresses = ri_resolved_public_host_addresses($host);
+    if ($addresses === []) {
+        $error = 'Remote URL host did not resolve to public addresses.';
+        return [];
+    }
+
+    $address = $addresses[0];
+    if (str_contains($address, ':') && !str_starts_with($address, '[')) {
+        $address = '[' . $address . ']';
+    }
+
+    return [$host . ':' . $port . ':' . $address];
 }
 
 function ri_remote_curl_handle_result($handle, mixed $response, float $startedAt): array
@@ -566,6 +618,30 @@ function ri_is_private_or_local_host(string $host, bool $resolveDns): bool
     }
 
     return false;
+}
+
+function ri_resolved_public_host_addresses(string $host): array
+{
+    $host = strtolower(trim($host, '[]'));
+    if (filter_var($host, FILTER_VALIDATE_IP) !== false) {
+        return ri_is_public_ip($host) ? [$host] : [];
+    }
+
+    $addresses = ri_resolve_host_addresses($host);
+    if ($addresses === []) {
+        return [];
+    }
+
+    $publicAddresses = [];
+    foreach ($addresses as $address) {
+        if (!ri_is_public_ip($address)) {
+            return [];
+        }
+
+        $publicAddresses[] = $address;
+    }
+
+    return array_values(array_unique($publicAddresses));
 }
 
 function ri_is_public_ip(string $address): bool
