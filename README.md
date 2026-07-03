@@ -175,6 +175,7 @@ docker run --rm -p 3000:3000 --env-file .env -v ${PWD}/images:/app/images -v ${P
 ```
 
 The container indexes images on startup by default. Set `RI_AUTO_INDEX_ON_START=false` when you want to run indexing separately with `docker run --rm --env-file .env -v ${PWD}/images:/app/images -v ${PWD}/.runtime:/app/.runtime random-image-api php bin/console.php index`.
+The container drops PHP to the non-root `app` user by default. On Linux bind mounts, make sure the mounted `images` and `.runtime` directories are writable by UID `10001`, or set `RI_RUN_USER` to a suitable user inside a derived image.
 
 ## Admin API
 

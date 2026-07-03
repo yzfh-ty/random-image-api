@@ -175,6 +175,7 @@ docker run --rm -p 3000:3000 --env-file .env -v ${PWD}/images:/app/images -v ${P
 ```
 
 容器默认启动时会自动索引。若想手动控制索引，可设置 `RI_AUTO_INDEX_ON_START=false`，再用 `docker run --rm --env-file .env -v ${PWD}/images:/app/images -v ${PWD}/.runtime:/app/.runtime random-image-api php bin/console.php index` 单独执行。
+容器默认会把 PHP 降权到非 root 的 `app` 用户运行。Linux bind mount 场景下，请确保挂载的 `images` 和 `.runtime` 目录允许 UID `10001` 写入，或在派生镜像中设置合适的 `RI_RUN_USER`。
 
 ## 管理接口
 

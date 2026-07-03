@@ -1,6 +1,6 @@
 FROM php:8.2-cli-alpine
 
-RUN apk add --no-cache curl-dev sqlite-dev \
+RUN apk add --no-cache curl-dev sqlite-dev su-exec \
     && docker-php-ext-install curl pdo_sqlite
 
 WORKDIR /app
@@ -11,12 +11,16 @@ COPY bin /app/bin
 COPY .env.example /app/.env.example
 COPY docker/entrypoint.sh /usr/local/bin/random-image-api-entrypoint
 
-RUN mkdir -p /app/images /app/.runtime \
+RUN addgroup -S app \
+    && adduser -S -D -H -u 10001 -G app app \
+    && mkdir -p /app/images /app/.runtime \
+    && chown -R app:app /app/images /app/.runtime \
     && chmod +x /usr/local/bin/random-image-api-entrypoint
 
 ENV RI_SERVER_HOST=0.0.0.0 \
     RI_SERVER_PORT=3000 \
-    RI_IMAGE_ROOT=images
+    RI_IMAGE_ROOT=images \
+    RI_RUN_USER=app
 
 VOLUME ["/app/images", "/app/.runtime"]
 
