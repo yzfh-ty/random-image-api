@@ -9,6 +9,7 @@ const RI_IMAGE_TYPE_PC = 'pc';
 const RI_IMAGE_TYPE_MOBILE = 'mobile';
 const RI_IMAGE_TYPE_SQUARE = 'square';
 const RI_IMAGE_TYPE_UNKNOWN = 'unknown';
+const RI_MANAGED_TYPE_FOLDERS = [RI_IMAGE_TYPE_PC, RI_IMAGE_TYPE_MOBILE];
 
 require __DIR__ . '/modules/support.php';
 require __DIR__ . '/modules/image_type.php';

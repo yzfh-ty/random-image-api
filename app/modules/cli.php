@@ -21,13 +21,6 @@ function ri_cli_main(string $baseDir, array $argv): int
             return 0;
         }
 
-        if ($command === 'paths') {
-            $config = ri_load_config($baseDir);
-            $index = ri_open_image_index($config, $baseDir);
-            ri_cli_output(['paths' => ri_index_paths($index, $options['folder'] ?? null)], $options['json'], 'ri_cli_print_paths');
-            return 0;
-        }
-
         if ($command === 'check-links') {
             $result = ri_check_remote_links($baseDir, $options['folder'] ?? null);
             ri_cli_output($result, $options['json'], 'ri_cli_print_check_links_summary');
@@ -53,7 +46,6 @@ function ri_cli_print_usage(string $script): void
     echo "Usage:\n";
     echo "  php {$script} index [--folder=name]   Rebuild the SQLite image index.\n";
     echo "  php {$script} status [--json]         Show index status and folder counts.\n";
-    echo "  php {$script} paths [--folder=name]   List indexed category paths.\n";
     echo "  php {$script} check-links             Check remote links from links.txt.\n";
 }
 
@@ -95,7 +87,6 @@ function ri_cli_print_index_summary(array $stats): void
     echo 'Started at: ' . $stats['startedAt'] . "\n";
     echo 'Finished at: ' . $stats['finishedAt'] . "\n";
     echo 'Total: ' . $stats['total'] . ' images, local: ' . $stats['localCount'] . ', remote: ' . $stats['remoteCount'] . "\n";
-    echo 'Paths: ' . $stats['pathCount'] . "\n";
 
     foreach ($stats['folders'] as $folder) {
         echo '- ' . $folder['folder'] . ': ' . $folder['total'] . ' total, local ' . $folder['localCount'] . ', remote ' . $folder['remoteCount'] . "\n";
@@ -120,7 +111,6 @@ function ri_cli_print_status(array $status): void
     }
     echo 'Total: ' . $status['total'] . ' images, local: ' . $status['localCount'] . ', remote: ' . $status['remoteCount'] . "\n";
     echo 'Types: pc ' . $status['pcCount'] . ', mobile ' . $status['mobileCount'] . "\n";
-    echo 'Paths: ' . $status['pathCount'] . "\n";
     echo 'Remote link checks: ' . $status['remoteLinkChecks']['total'] . ' checked, '
         . $status['remoteLinkChecks']['ok'] . ' ok, '
         . $status['remoteLinkChecks']['failed'] . ' failed' . "\n";
@@ -131,13 +121,6 @@ function ri_cli_print_status(array $status): void
             . ', remote ' . $folder['remoteCount']
             . ', pc ' . $folder['pcCount']
             . ', mobile ' . $folder['mobileCount'] . "\n";
-    }
-}
-
-function ri_cli_print_paths(array $payload): void
-{
-    foreach ($payload['paths'] as $path) {
-        echo '- ' . $path['path'] . ': ' . $path['total'] . ' images (' . $path['folder'] . ')' . "\n";
     }
 }
 

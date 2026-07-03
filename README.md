@@ -6,14 +6,13 @@ A PHP 8.2 + SQLite random image API. It randomly serves images from configured l
 
 ## Features
 
-- `GET /`: randomly selects from all configured categories and their subdirectories.
-- `GET /:folder`: randomly selects from a configured category and its subdirectories.
-- `GET /:folder/:subPath`: randomly selects from a specific subcategory path.
+- `GET /`: randomly selects from all configured categories.
+- `GET /:folder`: randomly selects from one configured category.
 - `GET /:folder/:id.ext`: serves an indexed short image URL. Local images are streamed by the server, while remote TXT links return a 302 redirect to the original URL.
 - `GET /?json=1`: returns JSON with a short image URL under the current domain.
 - Opening `/` or `/erciyuan` directly in a browser returns an HTML image viewer page. Refreshing the page picks a new image.
 - Requests from `<img>` tags or CSS backgrounds receive a 302 redirect to the short image URL.
-- Local images are indexed as `pc` for landscape images and `mobile` for portrait images.
+- Local images are indexed as `pc` for landscape images and `mobile` for portrait images, then moved into managed `pc/` or `mobile/` folders during indexing.
 - Requests can filter image type with `?type=pc` or `?type=mobile`; without this parameter, browser requests are auto-detected from Client Hints or User-Agent.
 - HTTP requests read from SQLite only. Directory scanning is never done during normal requests.
 
@@ -93,16 +92,18 @@ Set `server.trustProxy` to `true` only when the app is behind a trusted reverse 
 ```text
 images/
   erciyuan/
-    001.jpg
+    001.jpg            # newly uploaded image; indexing will move it if it is pc/mobile
     links.txt
-    wallpaper/
+    pc/
       002.jpg
-      links.txt
+    mobile/
+      003.jpg
 ```
 
-- `/` includes all configured categories, subdirectories, and TXT links.
-- `/erciyuan` includes `erciyuan` and all of its subdirectories.
-- `/erciyuan/wallpaper` only selects from that subdirectory path and its children.
+- `/` includes all configured categories and root-level TXT links.
+- `/erciyuan` includes only the `erciyuan` category.
+- `/erciyuan/pc` and `/erciyuan/mobile` are not public routes; use `/erciyuan?type=pc` or `/erciyuan?type=mobile`.
+- Other subdirectories are ignored by indexing and are not treated as subcategories.
 
 ## PC And Mobile Images
 
@@ -112,6 +113,8 @@ During indexing, local images are classified by dimensions:
 - `mobile`: height is greater than width.
 - `square`: width equals height.
 - `unknown`: dimensions cannot be detected, or the image comes from a TXT remote link.
+
+Put newly uploaded local images directly in the category folder, for example `images/erciyuan/001.jpg`. The index command moves landscape images into `images/erciyuan/pc/` and portrait images into `images/erciyuan/mobile/`. Square or unreadable images stay in the category folder.
 
 Random endpoints support explicit type filtering:
 
@@ -128,7 +131,9 @@ Remote links from `links.txt` are indexed as `unknown`, because the service does
 
 ## Indexing
 
-HTTP requests never scan directories. Rebuild the index after adding, deleting, moving images, or editing `links.txt`.
+HTTP requests never scan directories. Rebuild the index after adding, deleting, moving images, or editing the category-level `links.txt`.
+
+The index command also organizes local files: it creates `pc/` and `mobile/` inside each configured category when needed, then moves detected landscape and portrait images into those folders. Files that cannot be classified are left where they are.
 
 Local PHP path used during development:
 
@@ -152,12 +157,6 @@ Rebuild a single category:
 
 ```powershell
 D:\phpstudy_pro\Extensions\php\php8.2.9nts\php.exe -n -d extension_dir=D:\phpstudy_pro\Extensions\php\php8.2.9nts\ext -d extension=pdo_sqlite -d extension=sqlite3 bin\console.php index --folder=erciyuan
-```
-
-List indexed paths:
-
-```powershell
-D:\phpstudy_pro\Extensions\php\php8.2.9nts\php.exe -n -d extension_dir=D:\phpstudy_pro\Extensions\php\php8.2.9nts\ext -d extension=pdo_sqlite -d extension=sqlite3 bin\console.php paths
 ```
 
 Check remote links:

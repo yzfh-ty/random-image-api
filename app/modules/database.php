@@ -35,15 +35,6 @@ function ri_open_image_index(array $config, string $baseDir): PDO
     ri_ensure_image_index_schema($pdo);
     $pdo->exec('CREATE INDEX IF NOT EXISTS idx_image_index_orientation ON image_index (orientation)');
     $pdo->exec(
-        'CREATE TABLE IF NOT EXISTS image_paths (
-            path TEXT NOT NULL,
-            folder TEXT NOT NULL,
-            image_id INTEGER NOT NULL,
-            PRIMARY KEY (path, folder, image_id)
-        )'
-    );
-    $pdo->exec('CREATE INDEX IF NOT EXISTS idx_image_paths_path ON image_paths (path)');
-    $pdo->exec(
         'CREATE TABLE IF NOT EXISTS image_sequences (
             folder TEXT PRIMARY KEY,
             next_id INTEGER NOT NULL
@@ -189,41 +180,6 @@ function ri_get_index_meta(PDO $index, string $key): ?string
     $value = $statement->fetchColumn();
 
     return $value === false ? null : (string)$value;
-}
-
-function ri_items_for_all(PDO $index, array $config, string $baseDir): array
-{
-    $folders = $config['folders'];
-    if ($folders === []) {
-        return [];
-    }
-
-    $placeholders = ri_sql_placeholders('folder', count($folders));
-    $statement = $index->prepare(
-        'SELECT folder, index_key, source_type, target, extension, orientation, id
-         FROM image_index
-         WHERE folder IN (' . implode(', ', array_keys($placeholders)) . ')
-         ORDER BY folder, id'
-    );
-    $statement->execute(array_combine(array_keys($placeholders), $folders));
-
-    return ri_rows_to_items($statement->fetchAll(PDO::FETCH_ASSOC), $config, $baseDir);
-}
-
-function ri_items_for_path(PDO $index, array $config, string $baseDir, string $scopePath): array
-{
-    $statement = $index->prepare(
-        'SELECT i.folder, i.index_key, i.source_type, i.target, i.extension, i.orientation, i.id
-         FROM image_paths AS p
-         INNER JOIN image_index AS i
-             ON i.folder = p.folder
-            AND i.id = p.image_id
-         WHERE p.path = :path
-         ORDER BY i.folder, i.id'
-    );
-    $statement->execute([':path' => $scopePath]);
-
-    return ri_rows_to_items($statement->fetchAll(PDO::FETCH_ASSOC), $config, $baseDir);
 }
 
 function ri_find_item_by_index(PDO $index, array $config, string $baseDir, string $folder, int $id, string $extension): ?array

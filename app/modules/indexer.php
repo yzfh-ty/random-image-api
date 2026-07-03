@@ -22,7 +22,7 @@ function ri_build_index(string $baseDir, ?string $onlyFolder = null): array
                 ri_remove_unconfigured_index_rows($index, $config['folders']);
             }
 
-            ri_prepare_index_rebuild($index, $folders);
+            ri_prepare_index_rebuild($index);
 
             foreach ($folders as $folder) {
                 $folderPath = ri_resolve_path($imageRoot, $folder);
@@ -37,7 +37,7 @@ function ri_build_index(string $baseDir, ?string $onlyFolder = null): array
                     continue;
                 }
 
-                ri_scan_directory_for_index($config, $folder, $folderPath, $folderPath, $index, $warnings);
+                ri_scan_category_for_index($config, $folder, $folderPath, $index, $warnings);
             }
 
             ri_finalize_index_rebuild($index, $folders);
@@ -95,7 +95,7 @@ function ri_remove_unconfigured_index_rows(PDO $index, array $configuredFolders)
     $params = array_combine(array_keys($placeholders), $configuredFolders);
     $filter = implode(', ', array_keys($placeholders));
 
-    foreach (['image_paths', 'image_index', 'image_sequences'] as $table) {
+    foreach (['image_index', 'image_sequences'] as $table) {
         $delete = $index->prepare("DELETE FROM {$table} WHERE folder NOT IN ({$filter})");
         $delete->execute($params);
     }
@@ -158,7 +158,7 @@ function ri_append_index_log(array $config, string $baseDir, string $event, arra
     }
 }
 
-function ri_prepare_index_rebuild(PDO $index, array $folders): void
+function ri_prepare_index_rebuild(PDO $index): void
 {
     $index->exec('DROP TABLE IF EXISTS current_images');
     $index->exec(
@@ -168,12 +168,6 @@ function ri_prepare_index_rebuild(PDO $index, array $folders): void
             PRIMARY KEY (folder, index_key)
         )'
     );
-
-    $placeholders = ri_sql_placeholders('folder', count($folders));
-    $deletePaths = $index->prepare(
-        'DELETE FROM image_paths WHERE folder IN (' . implode(', ', array_keys($placeholders)) . ')'
-    );
-    $deletePaths->execute(array_combine(array_keys($placeholders), $folders));
 }
 
 function ri_finalize_index_rebuild(PDO $index, array $folders): void
@@ -202,17 +196,17 @@ function ri_finalize_index_rebuild(PDO $index, array $folders): void
     $index->exec('DROP TABLE IF EXISTS current_images');
 }
 
-function ri_scan_directory_for_index(
+function ri_scan_category_for_index(
     array $config,
     string $folder,
     string $folderPath,
-    string $currentPath,
     PDO $index,
     array &$warnings
 ): void {
-    $entries = scandir($currentPath);
+    ri_ensure_managed_type_directories($folderPath, $folder, $warnings);
+    $entries = scandir($folderPath);
     if ($entries === false) {
-        $warnings[] = 'Cannot read directory: ' . ri_to_url_path(ri_relative_path($folderPath, $currentPath));
+        $warnings[] = 'Cannot read directory: ' . $folder;
         return;
     }
 
@@ -221,14 +215,18 @@ function ri_scan_directory_for_index(
             continue;
         }
 
-        $entryPath = $currentPath . DIRECTORY_SEPARATOR . $entry;
+        $entryPath = $folderPath . DIRECTORY_SEPARATOR . $entry;
         if (is_dir($entryPath)) {
             if (is_link($entryPath) || !ri_is_inside($folderPath, $entryPath)) {
-                $warnings[] = 'Skipped unsafe or linked directory: ' . ri_to_url_path(ri_relative_path($folderPath, $entryPath));
+                $warnings[] = 'Skipped unsafe or linked directory: ' . $folder . '/' . $entry;
                 continue;
             }
 
-            ri_scan_directory_for_index($config, $folder, $folderPath, $entryPath, $index, $warnings);
+            if (in_array($entry, RI_MANAGED_TYPE_FOLDERS, true)) {
+                ri_scan_type_directory_for_index($config, $folder, $folderPath, $entryPath, $index, $warnings);
+            } else {
+                $warnings[] = 'Ignored subdirectory because subcategory routing is disabled: ' . $folder . '/' . $entry;
+            }
             continue;
         }
 
@@ -237,25 +235,138 @@ function ri_scan_directory_for_index(
         }
 
         if (in_array($entry, $config['linkFiles'], true)) {
-            $directoryRelativePath = ri_to_url_path(ri_relative_path($folderPath, $currentPath));
-            ri_index_remote_link_file($config, $folder, $entryPath, $directoryRelativePath, $index);
-        }
-
-        $extension = strtolower('.' . pathinfo($entryPath, PATHINFO_EXTENSION));
-        if (!in_array($extension, $config['imageExtensions'], true)) {
+            ri_index_remote_link_file($config, $folder, $entryPath, $index);
             continue;
         }
 
-        $relativePath = ri_to_url_path(ri_relative_path($folderPath, $entryPath));
-        $extensionWithoutDot = strtolower(pathinfo($entryPath, PATHINFO_EXTENSION));
-        $orientation = ri_detect_local_image_type($entryPath);
-        $id = ri_remember_index_image($index, $folder, 'local', $relativePath, $extensionWithoutDot, $relativePath, $orientation);
-        $directoryRelativePath = dirname($relativePath) === '.' ? '' : dirname($relativePath);
-        ri_add_index_paths($index, $folder, $directoryRelativePath, $id);
+        ri_index_local_image_file($config, $folder, $folderPath, $entryPath, $index, $warnings);
     }
 }
 
-function ri_index_remote_link_file(array $config, string $folder, string $filePath, string $directoryRelativePath, PDO $index): void
+function ri_ensure_managed_type_directories(string $folderPath, string $folder, array &$warnings): void
+{
+    foreach (RI_MANAGED_TYPE_FOLDERS as $typeFolder) {
+        $path = $folderPath . DIRECTORY_SEPARATOR . $typeFolder;
+        if (is_dir($path)) {
+            continue;
+        }
+
+        if (file_exists($path)) {
+            $warnings[] = 'Cannot create type directory because a file already exists: ' . $folder . '/' . $typeFolder;
+            continue;
+        }
+
+        if (!mkdir($path, 0777, true) && !is_dir($path)) {
+            $warnings[] = 'Cannot create type directory: ' . $folder . '/' . $typeFolder;
+        }
+    }
+}
+
+function ri_scan_type_directory_for_index(
+    array $config,
+    string $folder,
+    string $folderPath,
+    string $typePath,
+    PDO $index,
+    array &$warnings
+): void {
+    $entries = scandir($typePath);
+    if ($entries === false) {
+        $warnings[] = 'Cannot read directory: ' . $folder . '/' . basename($typePath);
+        return;
+    }
+
+    foreach ($entries as $entry) {
+        if ($entry === '.' || $entry === '..') {
+            continue;
+        }
+
+        $entryPath = $typePath . DIRECTORY_SEPARATOR . $entry;
+        if (is_dir($entryPath)) {
+            $warnings[] = 'Ignored nested type subdirectory: ' . $folder . '/' . basename($typePath) . '/' . $entry;
+            continue;
+        }
+
+        if (!is_file($entryPath) || is_link($entryPath) || !ri_is_inside($folderPath, $entryPath)) {
+            continue;
+        }
+
+        ri_index_local_image_file($config, $folder, $folderPath, $entryPath, $index, $warnings);
+    }
+}
+
+function ri_index_local_image_file(
+    array $config,
+    string $folder,
+    string $folderPath,
+    string $entryPath,
+    PDO $index,
+    array &$warnings
+): void {
+    $extension = strtolower('.' . pathinfo($entryPath, PATHINFO_EXTENSION));
+    if (!in_array($extension, $config['imageExtensions'], true)) {
+        return;
+    }
+
+    $orientation = ri_detect_local_image_type($entryPath);
+    $entryPath = ri_move_image_to_type_folder($folderPath, $entryPath, $orientation, $warnings);
+    $relativePath = ri_to_url_path(ri_relative_path($folderPath, $entryPath));
+    $extensionWithoutDot = strtolower(pathinfo($entryPath, PATHINFO_EXTENSION));
+    ri_remember_index_image($index, $folder, 'local', $relativePath, $extensionWithoutDot, $relativePath, $orientation);
+}
+
+function ri_move_image_to_type_folder(string $folderPath, string $entryPath, string $orientation, array &$warnings): string
+{
+    if (!in_array($orientation, RI_MANAGED_TYPE_FOLDERS, true)) {
+        return $entryPath;
+    }
+
+    $targetDirectory = $folderPath . DIRECTORY_SEPARATOR . $orientation;
+    if (!is_dir($targetDirectory) && !mkdir($targetDirectory, 0777, true) && !is_dir($targetDirectory)) {
+        $warnings[] = 'Cannot create target type directory for image: ' . ri_to_url_path(ri_relative_path($folderPath, $entryPath));
+        return $entryPath;
+    }
+
+    $targetPath = $targetDirectory . DIRECTORY_SEPARATOR . basename($entryPath);
+    if (realpath($entryPath) === realpath($targetPath)) {
+        return $entryPath;
+    }
+
+    $targetPath = ri_available_move_target($targetPath);
+    if (!@rename($entryPath, $targetPath)) {
+        $warnings[] = 'Cannot move image into type directory: ' . ri_to_url_path(ri_relative_path($folderPath, $entryPath));
+        return $entryPath;
+    }
+
+    return $targetPath;
+}
+
+function ri_available_move_target(string $targetPath): string
+{
+    if (!file_exists($targetPath)) {
+        return $targetPath;
+    }
+
+    $directory = dirname($targetPath);
+    $extension = pathinfo($targetPath, PATHINFO_EXTENSION);
+    $name = pathinfo($targetPath, PATHINFO_FILENAME);
+    $suffix = bin2hex(random_bytes(4));
+    $counter = 1;
+
+    do {
+        $filename = $name . '-' . $suffix . ($counter === 1 ? '' : '-' . $counter);
+        if ($extension !== '') {
+            $filename .= '.' . $extension;
+        }
+
+        $candidate = $directory . DIRECTORY_SEPARATOR . $filename;
+        $counter++;
+    } while (file_exists($candidate));
+
+    return $candidate;
+}
+
+function ri_index_remote_link_file(array $config, string $folder, string $filePath, PDO $index): void
 {
     $seen = [];
     $lines = file($filePath, FILE_IGNORE_NEW_LINES);
@@ -271,8 +382,7 @@ function ri_index_remote_link_file(array $config, string $folder, string $filePa
 
         $seen[$url] = true;
         $extension = ri_extension_from_url($url, $config);
-        $id = ri_remember_index_image($index, $folder, 'remote', $url, $extension, $url, RI_IMAGE_TYPE_UNKNOWN);
-        ri_add_index_paths($index, $folder, $directoryRelativePath, $id);
+        ri_remember_index_image($index, $folder, 'remote', $url, $extension, $url, RI_IMAGE_TYPE_UNKNOWN);
     }
 }
 
@@ -297,37 +407,4 @@ function ri_remember_index_image(
     ]);
 
     return $id;
-}
-
-function ri_add_index_paths(PDO $index, string $folder, string $directoryRelativePath, int $imageId): void
-{
-    $insert = $index->prepare(
-        'INSERT OR IGNORE INTO image_paths (path, folder, image_id)
-         VALUES (:path, :folder, :image_id)'
-    );
-
-    foreach (ri_ancestor_paths($folder, $directoryRelativePath) as $path) {
-        $insert->execute([
-            ':path' => $path,
-            ':folder' => $folder,
-            ':image_id' => $imageId,
-        ]);
-    }
-}
-
-function ri_ancestor_paths(string $folder, string $directoryRelativePath): array
-{
-    $directoryRelativePath = trim($directoryRelativePath, '/');
-    $paths = [$folder];
-
-    if ($directoryRelativePath === '') {
-        return $paths;
-    }
-
-    $segments = explode('/', $directoryRelativePath);
-    for ($index = 0; $index < count($segments); $index++) {
-        $paths[] = $folder . '/' . implode('/', array_slice($segments, 0, $index + 1));
-    }
-
-    return $paths;
 }

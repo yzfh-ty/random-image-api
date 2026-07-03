@@ -2,57 +2,9 @@
 
 declare(strict_types=1);
 
-function ri_select_and_remember_item(
-    array $items,
-    string $scopePath,
-    ?string $source,
-    ?array $config = null,
-    ?string $imageType = null
-): array
-{
-    ri_start_session($config);
-    $_SESSION['last_served'] ??= [];
-    $scopeKey = $scopePath . '|' . ($source ?? 'all') . '|' . ($imageType ?? 'all-types');
-    $lastKey = is_string($_SESSION['last_served'][$scopeKey] ?? null) ? $_SESSION['last_served'][$scopeKey] : null;
-    $item = ri_pick_item($items, $lastKey);
-    $_SESSION['last_served'][$scopeKey] = ri_image_key($item);
-    session_write_close();
-
-    return $item;
-}
-function ri_pick_item(array $items, ?string $lastKey): array
-{
-    $candidates = $items;
-    if (count($items) > 1 && $lastKey !== null) {
-        $candidates = array_values(array_filter(
-            $items,
-            static fn(array $item): bool => ri_image_key($item) !== $lastKey
-        ));
-    }
-
-    return $candidates[random_int(0, count($candidates) - 1)];
-}
-
 function ri_image_key(array $item): string
 {
     return $item['folder'] . ':' . $item['id'];
-}
-
-function ri_filter_items(array $items, ?string $source, ?string $imageType = null): array
-{
-    $filtered = $items;
-    if ($source === 'local' || $source === 'remote') {
-        $filtered = array_values(array_filter($filtered, static fn(array $item): bool => $item['sourceType'] === $source));
-    }
-
-    if ($imageType === RI_IMAGE_TYPE_PC || $imageType === RI_IMAGE_TYPE_MOBILE) {
-        $filtered = array_values(array_filter(
-            $filtered,
-            static fn(array $item): bool => ($item['orientation'] ?? RI_IMAGE_TYPE_UNKNOWN) === $imageType
-        ));
-    }
-
-    return array_values($filtered);
 }
 
 function ri_source_filter(): ?string

@@ -6,14 +6,13 @@
 
 ## 功能
 
-- `GET /`：从所有已配置分类及其子目录中随机。
-- `GET /:folder`：从指定分类及其子目录中随机。
-- `GET /:folder/:subPath`：从指定子目录分类中随机。
+- `GET /`：从所有已配置分类中随机。
+- `GET /:folder`：从指定分类中随机。
 - `GET /:folder/:id.ext`：访问索引生成的短图片链接；本地图片直接输出，TXT 远程链接 302 跳转到原始 URL。
 - `GET /?json=1`：返回当前域名下的短图片链接 JSON。
 - 浏览器直接打开 `/`、`/erciyuan` 时返回一个展示图片的 HTML 页面，刷新会重新随机。
 - 作为 `<img>` 或 CSS 背景请求时，接口返回 302 到短图片链接。
-- 本地图片索引时会按宽高识别类型：横图为 `pc`，竖图为 `mobile`。
+- 本地图片索引时会按宽高识别类型：横图为 `pc`，竖图为 `mobile`，并在索引时移动到受管理的 `pc/` 或 `mobile/` 目录。
 - 请求可用 `?type=pc` 或 `?type=mobile` 指定类型；不传时会根据 Client Hints 或 User-Agent 自动判断。
 - HTTP 请求只查 SQLite，不实时扫描目录，避免图片过多时卡住。
 
@@ -93,16 +92,18 @@ Copy-Item config.example.json config.json
 ```text
 images/
   erciyuan/
-    001.jpg
+    001.jpg            # 新上传图片；索引时会按尺寸移动
     links.txt
-    wallpaper/
+    pc/
       002.jpg
-      links.txt
+    mobile/
+      003.jpg
 ```
 
-- `/` 包含所有配置分类、子目录和 TXT 链接。
-- `/erciyuan` 包含 `erciyuan` 及其全部子目录。
-- `/erciyuan/wallpaper` 只从对应子目录及其子目录随机。
+- `/` 包含所有配置分类和分类根目录的 TXT 链接。
+- `/erciyuan` 只包含 `erciyuan` 这个分类。
+- `/erciyuan/pc` 和 `/erciyuan/mobile` 不是公开路由；需要横图或竖图时使用 `/erciyuan?type=pc` 或 `/erciyuan?type=mobile`。
+- 其它子目录会被索引忽略，不再作为子分类。
 
 ## PC 和 Mobile 图片
 
@@ -112,6 +113,8 @@ images/
 - `mobile`：高度大于宽度，适合手机竖屏背景。
 - `square`：宽高相同。
 - `unknown`：无法读取尺寸，或来自 TXT 远程链接。
+
+新上传的本地图片直接放在分类目录，例如 `images/erciyuan/001.jpg`。执行索引命令后，横图会移动到 `images/erciyuan/pc/`，竖图会移动到 `images/erciyuan/mobile/`。方图或无法识别尺寸的图片会留在分类目录。
 
 随机接口支持显式指定类型：
 
@@ -128,7 +131,9 @@ images/
 
 ## 索引
 
-HTTP 请求不会扫描目录。新增、删除、移动图片，或修改 `links.txt` 后，需要重新索引。
+HTTP 请求不会扫描目录。新增、删除、移动图片，或修改分类根目录的 `links.txt` 后，需要重新索引。
+
+索引命令也会整理本地文件：必要时在每个已配置分类里创建 `pc/` 和 `mobile/`，然后把识别出的横图和竖图移动进去。识别不出来的文件保持原位置。
 
 你本机 PHP 路径：
 
@@ -152,12 +157,6 @@ D:\phpstudy_pro\Extensions\php\php8.2.9nts\php.exe -n -d extension_dir=D:\phpstu
 
 ```powershell
 D:\phpstudy_pro\Extensions\php\php8.2.9nts\php.exe -n -d extension_dir=D:\phpstudy_pro\Extensions\php\php8.2.9nts\ext -d extension=pdo_sqlite -d extension=sqlite3 bin\console.php index --folder=erciyuan
-```
-
-查看已索引路径：
-
-```powershell
-D:\phpstudy_pro\Extensions\php\php8.2.9nts\php.exe -n -d extension_dir=D:\phpstudy_pro\Extensions\php\php8.2.9nts\ext -d extension=pdo_sqlite -d extension=sqlite3 bin\console.php paths
 ```
 
 检查远程链接：

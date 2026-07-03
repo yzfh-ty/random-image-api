@@ -18,15 +18,6 @@ function ri_index_status(PDO $index, array $config): array
         $mobileCount += $folder['mobileCount'];
     }
 
-    $pathCount = (int)$index->query(
-        'SELECT COUNT(*)
-         FROM (
-            SELECT path, folder
-            FROM image_paths
-            GROUP BY path, folder
-         )'
-    )->fetchColumn();
-
     return [
         'database' => $config['indexDatabase'],
         'lastIndexedAt' => ri_get_index_meta($index, 'last_indexed_at'),
@@ -38,7 +29,6 @@ function ri_index_status(PDO $index, array $config): array
         'remoteCount' => $remoteCount,
         'pcCount' => $pcCount,
         'mobileCount' => $mobileCount,
-        'pathCount' => $pathCount,
         'remoteLinkChecks' => ri_remote_link_check_status($index),
         'folders' => $folders,
     ];
@@ -50,38 +40,6 @@ function ri_nullable_int(?string $value): ?int
     }
 
     return (int)$value;
-}
-
-function ri_index_paths(PDO $index, ?string $folder = null): array
-{
-    if ($folder === null) {
-        $statement = $index->query(
-            'SELECT path, folder, COUNT(*) AS total
-             FROM image_paths
-             GROUP BY path, folder
-             ORDER BY path, folder'
-        );
-    } else {
-        $statement = $index->prepare(
-            'SELECT path, folder, COUNT(*) AS total
-             FROM image_paths
-             WHERE folder = :folder
-             GROUP BY path, folder
-             ORDER BY path, folder'
-        );
-        $statement->execute([':folder' => $folder]);
-    }
-
-    $paths = [];
-    foreach ($statement->fetchAll(PDO::FETCH_ASSOC) as $row) {
-        $paths[] = [
-            'path' => (string)$row['path'],
-            'folder' => (string)$row['folder'],
-            'total' => (int)$row['total'],
-        ];
-    }
-
-    return $paths;
 }
 
 function ri_remote_link_check_status(PDO $index): array
