@@ -32,11 +32,6 @@ function ri_open_image_index(array $config, string $baseDir): PDO
             UNIQUE (folder, id)
         )'
     );
-    ri_ensure_image_index_schema($pdo);
-    $pdo->exec('CREATE INDEX IF NOT EXISTS idx_image_index_orientation ON image_index (orientation)');
-    $pdo->exec('CREATE INDEX IF NOT EXISTS idx_image_index_folder_orientation_id ON image_index (folder, orientation, id)');
-    $pdo->exec('CREATE INDEX IF NOT EXISTS idx_image_index_folder_source_id ON image_index (folder, source_type, id)');
-    $pdo->exec('CREATE INDEX IF NOT EXISTS idx_image_index_folder_source_orientation_id ON image_index (folder, source_type, orientation, id)');
     $pdo->exec(
         'CREATE TABLE IF NOT EXISTS image_sequences (
             folder TEXT PRIMARY KEY,
@@ -62,14 +57,43 @@ function ri_open_image_index(array $config, string $baseDir): PDO
             PRIMARY KEY (folder, image_id)
         )'
     );
+    ri_ensure_image_index_schema($pdo);
+    ri_ensure_image_index_indexes($pdo);
 
     return $pdo;
 }
+
 function ri_ensure_image_index_schema(PDO $index): void
 {
+    $currentVersion = ri_get_index_schema_version($index);
+
     if (!ri_table_has_column($index, 'image_index', 'orientation')) {
         $index->exec('ALTER TABLE image_index ADD COLUMN orientation TEXT NOT NULL DEFAULT "unknown"');
     }
+
+    ri_drop_legacy_index_tables($index);
+    if ($currentVersion !== RI_IMAGE_INDEX_SCHEMA_VERSION) {
+        ri_set_index_meta($index, 'schema_version', (string)RI_IMAGE_INDEX_SCHEMA_VERSION);
+        ri_set_index_meta($index, 'schema_updated_at', gmdate('c'));
+    }
+}
+
+function ri_ensure_image_index_indexes(PDO $index): void
+{
+    $index->exec('CREATE INDEX IF NOT EXISTS idx_image_index_orientation ON image_index (orientation)');
+    $index->exec('CREATE INDEX IF NOT EXISTS idx_image_index_folder_orientation_id ON image_index (folder, orientation, id)');
+    $index->exec('CREATE INDEX IF NOT EXISTS idx_image_index_folder_source_id ON image_index (folder, source_type, id)');
+    $index->exec('CREATE INDEX IF NOT EXISTS idx_image_index_folder_source_orientation_id ON image_index (folder, source_type, orientation, id)');
+}
+
+function ri_get_index_schema_version(PDO $index): ?int
+{
+    return ri_nullable_int(ri_get_index_meta($index, 'schema_version'));
+}
+
+function ri_drop_legacy_index_tables(PDO $index): void
+{
+    $index->exec('DROP TABLE IF EXISTS current_images');
 }
 
 function ri_table_has_column(PDO $index, string $table, string $column): bool

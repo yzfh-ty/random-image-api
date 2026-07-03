@@ -5,6 +5,7 @@ declare(strict_types=1);
 const RI_RESERVED_FOLDERS = ['_api', '_assets', '_remote'];
 const RI_DEFAULT_IMAGE_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.avif', '.bmp'];
 const RI_DEFAULT_REMOTE_EXTENSION = 'jpg';
+const RI_IMAGE_INDEX_SCHEMA_VERSION = 1;
 const RI_IMAGE_TYPE_PC = 'pc';
 const RI_IMAGE_TYPE_MOBILE = 'mobile';
 const RI_IMAGE_TYPE_SQUARE = 'square';

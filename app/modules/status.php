@@ -20,6 +20,8 @@ function ri_index_status(PDO $index, array $config): array
 
     return [
         'database' => $config['indexDatabase'],
+        'schemaVersion' => ri_get_index_schema_version($index),
+        'schemaUpdatedAt' => ri_get_index_meta($index, 'schema_updated_at'),
         'lastIndexedAt' => ri_get_index_meta($index, 'last_indexed_at'),
         'lastIndexedDurationMs' => ri_nullable_int(ri_get_index_meta($index, 'last_indexed_duration_ms')),
         'lastIndexedWarningCount' => ri_nullable_int(ri_get_index_meta($index, 'last_indexed_warning_count')),

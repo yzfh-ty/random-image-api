@@ -289,6 +289,7 @@ function ri_cli_print_doctor(array $result): void
 function ri_cli_print_status(array $status): void
 {
     echo 'Database: ' . $status['database'] . "\n";
+    echo 'Schema version: ' . ($status['schemaVersion'] ?? 'unknown') . "\n";
     echo 'Last indexed at: ' . ($status['lastIndexedAt'] ?? 'never') . "\n";
     echo 'Last duration: ' . ($status['lastIndexedDurationMs'] ?? 'unknown') . " ms\n";
     echo 'Last warnings: ' . ($status['lastIndexedWarningCount'] ?? 'unknown') . "\n";
