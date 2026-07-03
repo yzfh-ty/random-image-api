@@ -11,25 +11,15 @@ function ri_check_remote_links(string $baseDir, ?string $onlyFolder = null): arr
 
     $index = ri_open_image_index($config, $baseDir);
     $items = ri_remote_link_items($index, $onlyFolder);
+    $checkedItems = ri_check_remote_link_items($items, $config);
     $results = [];
     $ok = 0;
     $failed = 0;
 
-    foreach ($items as $item) {
-        $checked = ri_check_remote_url($item['url'], $config);
-        $result = [
-            'folder' => $item['folder'],
-            'id' => $item['id'],
-            'url' => $item['url'],
-            'ok' => $checked['ok'],
-            'statusCode' => $checked['statusCode'],
-            'error' => $checked['error'],
-            'durationMs' => $checked['durationMs'],
-            'checkedAt' => gmdate('c'),
-        ];
+    foreach ($checkedItems as $result) {
         ri_store_remote_link_check($index, $result);
         $results[] = $result;
-        $checked['ok'] ? $ok++ : $failed++;
+        $result['ok'] ? $ok++ : $failed++;
     }
 
     return [
@@ -39,6 +29,37 @@ function ri_check_remote_links(string $baseDir, ?string $onlyFolder = null): arr
         'items' => $results,
     ];
 }
+
+function ri_check_remote_link_items(array $items, array $config): array
+{
+    $concurrency = (int)$config['linkCheck']['concurrency'];
+    if ($concurrency > 1 && count($items) > 1 && function_exists('curl_multi_init') && function_exists('curl_init')) {
+        return ri_check_remote_link_items_with_curl_multi($items, $config, $concurrency);
+    }
+
+    $results = [];
+    foreach ($items as $item) {
+        $checked = ri_check_remote_url($item['url'], $config);
+        $results[] = ri_remote_link_check_result($item, $checked);
+    }
+
+    return $results;
+}
+
+function ri_remote_link_check_result(array $item, array $checked): array
+{
+    return [
+        'folder' => $item['folder'],
+        'id' => $item['id'],
+        'url' => $item['url'],
+        'ok' => $checked['ok'],
+        'statusCode' => $checked['statusCode'],
+        'error' => $checked['error'],
+        'durationMs' => $checked['durationMs'],
+        'checkedAt' => gmdate('c'),
+    ];
+}
+
 function ri_remote_link_items(PDO $index, ?string $folder): array
 {
     if ($folder === null) {
@@ -100,6 +121,198 @@ function ri_check_remote_url(string $url, array $config): array
 
     $lastResult['durationMs'] = (int)round((microtime(true) - $startedAt) * 1000);
     return $lastResult;
+}
+
+function ri_check_remote_link_items_with_curl_multi(array $items, array $config, int $concurrency): array
+{
+    $states = [];
+    $requests = [];
+
+    foreach ($items as $index => $item) {
+        $states[$index] = [
+            'item' => $item,
+            'startedAt' => microtime(true),
+            'done' => false,
+            'checked' => null,
+        ];
+
+        if (!ri_is_safe_remote_url($item['url'], $config, true)) {
+            $states[$index]['done'] = true;
+            $states[$index]['checked'] = [
+                'ok' => false,
+                'statusCode' => null,
+                'error' => 'Remote URL host is not allowed.',
+                'durationMs' => 0,
+            ];
+            continue;
+        }
+
+        $requests[] = [
+            'state' => $index,
+            'url' => $item['url'],
+            'method' => 'HEAD',
+            'redirectsRemaining' => 5,
+        ];
+    }
+
+    while ($requests !== []) {
+        $responses = ri_run_remote_curl_multi_requests($requests, $config, $concurrency);
+        $requests = [];
+        foreach ($responses as $response) {
+            ri_update_remote_link_state_from_response($states[$response['state']], $response, $requests, $config);
+        }
+    }
+
+    $results = [];
+    foreach ($states as $state) {
+        if (!$state['done'] || !is_array($state['checked'])) {
+            $state['checked'] = [
+                'ok' => false,
+                'statusCode' => null,
+                'error' => 'Remote check did not complete.',
+                'durationMs' => (int)round((microtime(true) - $state['startedAt']) * 1000),
+            ];
+        }
+
+        $results[] = ri_remote_link_check_result($state['item'], $state['checked']);
+    }
+
+    return $results;
+}
+
+function ri_update_remote_link_state_from_response(array &$state, array $response, array &$nextRequests, array $config): void
+{
+    $statusCode = $response['statusCode'];
+    if ($statusCode !== null && $statusCode >= 300 && $statusCode < 400 && $response['redirectsRemaining'] > 0) {
+        $location = is_string($response['response']) ? ri_location_from_header_string($response['response']) : null;
+        if ($location !== null) {
+            $redirectUrl = ri_resolve_redirect_url($response['url'], $location);
+            if ($redirectUrl === null || !ri_is_safe_remote_url($redirectUrl, $config, true)) {
+                ri_finish_remote_link_state($state, [
+                    'ok' => false,
+                    'statusCode' => $statusCode,
+                    'error' => 'Redirect target is not allowed.',
+                ]);
+                return;
+            }
+
+            $nextRequests[] = [
+                'state' => $response['state'],
+                'url' => $redirectUrl,
+                'method' => $response['method'],
+                'redirectsRemaining' => $response['redirectsRemaining'] - 1,
+            ];
+            return;
+        }
+    }
+
+    if ($response['method'] === 'HEAD' && !$response['ok'] && in_array($statusCode, [405, 403, 501], true)) {
+        $nextRequests[] = [
+            'state' => $response['state'],
+            'url' => $state['item']['url'],
+            'method' => 'GET',
+            'redirectsRemaining' => 5,
+        ];
+        return;
+    }
+
+    ri_finish_remote_link_state($state, $response);
+}
+
+function ri_finish_remote_link_state(array &$state, array $response): void
+{
+    $state['done'] = true;
+    $state['checked'] = [
+        'ok' => (bool)$response['ok'],
+        'statusCode' => $response['statusCode'],
+        'error' => $response['error'],
+        'durationMs' => (int)round((microtime(true) - $state['startedAt']) * 1000),
+    ];
+}
+
+function ri_run_remote_curl_multi_requests(array $requests, array $config, int $concurrency): array
+{
+    $multi = curl_multi_init();
+    if ($multi === false) {
+        return ri_run_remote_curl_requests_sequentially($requests, $config);
+    }
+
+    $pending = array_values($requests);
+    $active = [];
+    $responses = [];
+
+    while ($pending !== [] || $active !== []) {
+        while (count($active) < $concurrency && $pending !== []) {
+            $request = array_shift($pending);
+            $startedAt = microtime(true);
+            $handle = ri_create_remote_curl_handle($request['url'], $config, $request['method']);
+            if ($handle === null) {
+                $responses[] = array_merge($request, [
+                    'ok' => false,
+                    'statusCode' => null,
+                    'error' => 'Cannot initialize cURL.',
+                    'durationMs' => 0,
+                    'response' => null,
+                ]);
+                continue;
+            }
+
+            $key = spl_object_id($handle);
+            $active[$key] = [
+                'handle' => $handle,
+                'request' => $request,
+                'startedAt' => $startedAt,
+            ];
+            curl_multi_add_handle($multi, $handle);
+        }
+
+        do {
+            $status = curl_multi_exec($multi, $running);
+        } while ($status === CURLM_CALL_MULTI_PERFORM);
+
+        while ($info = curl_multi_info_read($multi)) {
+            $handle = $info['handle'];
+            $key = spl_object_id($handle);
+            if (!isset($active[$key])) {
+                curl_multi_remove_handle($multi, $handle);
+                curl_close($handle);
+                continue;
+            }
+
+            $meta = $active[$key];
+            $response = curl_multi_getcontent($handle);
+            $responses[] = array_merge(
+                $meta['request'],
+                ri_remote_curl_handle_result($handle, $response, $meta['startedAt'])
+            );
+            curl_multi_remove_handle($multi, $handle);
+            curl_close($handle);
+            unset($active[$key]);
+        }
+
+        if ($active !== []) {
+            $selected = curl_multi_select($multi, 1.0);
+            if ($selected === -1) {
+                usleep(10000);
+            }
+        }
+    }
+
+    curl_multi_close($multi);
+    return $responses;
+}
+
+function ri_run_remote_curl_requests_sequentially(array $requests, array $config): array
+{
+    $responses = [];
+    foreach ($requests as $request) {
+        $responses[] = array_merge(
+            $request,
+            ri_request_remote_url_with_curl($request['url'], $config, $request['method'], $request['redirectsRemaining'])
+        ) + ['response' => null];
+    }
+
+    return $responses;
 }
 
 function ri_request_remote_url(string $url, array $config, string $method, int $redirectsRemaining = 5): array
@@ -176,14 +389,50 @@ function ri_request_remote_url(string $url, array $config, string $method, int $
 function ri_request_remote_url_with_curl(string $url, array $config, string $method, int $redirectsRemaining): array
 {
     $startedAt = microtime(true);
-    $handle = curl_init($url);
-    if ($handle === false) {
+    $handle = ri_create_remote_curl_handle($url, $config, $method);
+    if ($handle === null) {
         return [
             'ok' => false,
             'statusCode' => null,
             'error' => 'Cannot initialize cURL.',
             'durationMs' => 0,
         ];
+    }
+
+    $response = curl_exec($handle);
+    $result = ri_remote_curl_handle_result($handle, $response, $startedAt);
+    curl_close($handle);
+
+    if ($result['error'] !== null) {
+        return ri_public_remote_result($result);
+    }
+
+    $statusCode = $result['statusCode'];
+    if ($statusCode !== null && $statusCode >= 300 && $statusCode < 400 && $redirectsRemaining > 0 && is_string($result['response'])) {
+        $location = ri_location_from_header_string($result['response']);
+        if ($location !== null) {
+            $redirectUrl = ri_resolve_redirect_url($url, $location);
+            if ($redirectUrl === null || !ri_is_safe_remote_url($redirectUrl, $config, true)) {
+                return [
+                    'ok' => false,
+                    'statusCode' => $statusCode,
+                    'error' => 'Redirect target is not allowed.',
+                    'durationMs' => (int)round((microtime(true) - $startedAt) * 1000),
+                ];
+            }
+
+            return ri_request_remote_url_with_curl($redirectUrl, $config, $method, $redirectsRemaining - 1);
+        }
+    }
+
+    return ri_public_remote_result($result);
+}
+
+function ri_create_remote_curl_handle(string $url, array $config, string $method)
+{
+    $handle = curl_init($url);
+    if ($handle === false) {
+        return null;
     }
 
     curl_setopt_array($handle, [
@@ -207,11 +456,14 @@ function ri_request_remote_url_with_curl(string $url, array $config, string $met
         curl_setopt($handle, CURLOPT_PROXY, $config['linkCheck']['proxy']);
     }
 
-    $response = curl_exec($handle);
+    return $handle;
+}
+
+function ri_remote_curl_handle_result($handle, mixed $response, float $startedAt): array
+{
     $error = curl_error($handle);
     $errno = curl_errno($handle);
     $statusCode = (int)curl_getinfo($handle, CURLINFO_RESPONSE_CODE);
-    curl_close($handle);
 
     if ($errno !== 0) {
         return [
@@ -219,24 +471,8 @@ function ri_request_remote_url_with_curl(string $url, array $config, string $met
             'statusCode' => $statusCode > 0 ? $statusCode : null,
             'error' => $error,
             'durationMs' => (int)round((microtime(true) - $startedAt) * 1000),
+            'response' => is_string($response) ? $response : null,
         ];
-    }
-
-    if ($statusCode >= 300 && $statusCode < 400 && $redirectsRemaining > 0 && is_string($response)) {
-        $location = ri_location_from_header_string($response);
-        if ($location !== null) {
-            $redirectUrl = ri_resolve_redirect_url($url, $location);
-            if ($redirectUrl === null || !ri_is_safe_remote_url($redirectUrl, $config, true)) {
-                return [
-                    'ok' => false,
-                    'statusCode' => $statusCode,
-                    'error' => 'Redirect target is not allowed.',
-                    'durationMs' => (int)round((microtime(true) - $startedAt) * 1000),
-                ];
-            }
-
-            return ri_request_remote_url_with_curl($redirectUrl, $config, $method, $redirectsRemaining - 1);
-        }
     }
 
     return [
@@ -244,6 +480,17 @@ function ri_request_remote_url_with_curl(string $url, array $config, string $met
         'statusCode' => $statusCode > 0 ? $statusCode : null,
         'error' => null,
         'durationMs' => (int)round((microtime(true) - $startedAt) * 1000),
+        'response' => is_string($response) ? $response : null,
+    ];
+}
+
+function ri_public_remote_result(array $result): array
+{
+    return [
+        'ok' => $result['ok'],
+        'statusCode' => $result['statusCode'],
+        'error' => $result['error'],
+        'durationMs' => $result['durationMs'],
     ];
 }
 

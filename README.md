@@ -147,6 +147,7 @@ D:\phpstudy_pro\Extensions\php\php8.2.9nts\php.exe -n -d extension_dir=D:\phpstu
 ```
 
 Set `RI_HTTP_PROXY` only when the current network needs a proxy. `RI_LINKCHECK_VERIFY_TLS=0` is only recommended for local testing; keep TLS verification enabled in production.
+`RI_LINKCHECK_CONCURRENCY` defaults to `4` and uses cURL multi when the cURL extension is enabled; otherwise link checks fall back to sequential stream requests.
 
 ## Local Run
 

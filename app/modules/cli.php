@@ -163,6 +163,10 @@ function ri_cli_doctor(string $baseDir): array
         return ri_cli_doctor_result($checks);
     }
 
+    if ($config['linkCheck']['concurrency'] > 1 && !function_exists('curl_multi_init')) {
+        ri_cli_add_check($checks, 'linkcheck_concurrency', 'warn', 'Concurrent link checks require cURL; sequential fallback will be used.');
+    }
+
     $imageRoot = ri_resolve_path($baseDir, $config['imageRoot']);
     ri_cli_add_path_check($checks, 'image_root', $imageRoot, true);
     foreach ($config['folders'] as $folder) {

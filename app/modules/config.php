@@ -35,6 +35,7 @@ function ri_normalize_config(): array
         'defaultMode' => ri_config_string_with_env('RI_DEFAULT_MODE', 'redirect'),
         'linkCheck' => [
             'timeoutSeconds' => ri_config_int_with_env('RI_LINKCHECK_TIMEOUT', 5),
+            'concurrency' => ri_config_int_with_env('RI_LINKCHECK_CONCURRENCY', 4),
             'userAgent' => ri_config_string_with_env('RI_LINKCHECK_USER_AGENT', 'random-image-api/1.0'),
             'proxy' => ri_config_string_with_env('RI_HTTP_PROXY', ''),
             'verifyTls' => ri_config_bool_with_env('RI_LINKCHECK_VERIFY_TLS', true),
@@ -112,6 +113,9 @@ function ri_normalize_config(): array
 
     if ($config['linkCheck']['timeoutSeconds'] < 1 || $config['linkCheck']['timeoutSeconds'] > 60) {
         ri_send_error(500, 'invalid_config', 'linkCheck.timeoutSeconds must be between 1 and 60.');
+    }
+    if ($config['linkCheck']['concurrency'] < 1 || $config['linkCheck']['concurrency'] > 32) {
+        ri_send_error(500, 'invalid_config', 'RI_LINKCHECK_CONCURRENCY must be between 1 and 32.');
     }
     $config['linkCheck']['proxy'] = trim($config['linkCheck']['proxy']);
     foreach ($config['linkCheck']['allowedHosts'] as $host) {
