@@ -159,6 +159,22 @@ D:\phpstudy_pro\Extensions\php\php8.2.9nts\php.exe -n -d extension_dir=D:\phpstu
 
 Stop the local server process after testing.
 
+## Docker
+
+Build the image:
+
+```powershell
+docker build -t random-image-api .
+```
+
+Run it with local images and runtime data mounted from the project directory:
+
+```powershell
+docker run --rm -p 3000:3000 --env-file .env -v ${PWD}/images:/app/images -v ${PWD}/.runtime:/app/.runtime random-image-api
+```
+
+The container indexes images on startup by default. Set `RI_AUTO_INDEX_ON_START=false` when you want to run indexing separately with `docker run --rm --env-file .env -v ${PWD}/images:/app/images -v ${PWD}/.runtime:/app/.runtime random-image-api php bin/console.php index`.
+
 ## Admin API
 
 The `/_api` admin endpoints are disabled by default. To enable them:

@@ -159,6 +159,22 @@ D:\phpstudy_pro\Extensions\php\php8.2.9nts\php.exe -n -d extension_dir=D:\phpstu
 
 测试或访问完成后停止服务进程。
 
+## Docker
+
+构建镜像：
+
+```powershell
+docker build -t random-image-api .
+```
+
+运行时挂载当前项目里的图片目录和运行目录：
+
+```powershell
+docker run --rm -p 3000:3000 --env-file .env -v ${PWD}/images:/app/images -v ${PWD}/.runtime:/app/.runtime random-image-api
+```
+
+容器默认启动时会自动索引。若想手动控制索引，可设置 `RI_AUTO_INDEX_ON_START=false`，再用 `docker run --rm --env-file .env -v ${PWD}/images:/app/images -v ${PWD}/.runtime:/app/.runtime random-image-api php bin/console.php index` 单独执行。
+
 ## 管理接口
 
 `/_api` 管理接口默认关闭。需要启用时：
