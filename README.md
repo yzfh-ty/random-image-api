@@ -1,34 +1,43 @@
 # random-image-api
 
-基于 PHP 8.2 + SQLite 的随机图片 API。项目用于从配置好的本地分类目录和目录内 `links.txt` 远程直链中随机返回图片，并生成当前域名下的短链接，例如 `/erciyuan/1.png`。
+English | [简体中文](README.zh-CN.md)
 
-## 功能
+A PHP 8.2 + SQLite random image API. It randomly serves images from configured local category folders and remote image links listed in `links.txt`, then exposes short URLs under the current domain, such as `/erciyuan/1.png`.
 
-- `GET /`：从所有已配置分类及其子目录中随机。
-- `GET /:folder`：从指定分类及其子目录中随机。
-- `GET /:folder/:subPath`：从指定子目录分类中随机。
-- `GET /:folder/:id.ext`：访问索引生成的短图片链接；本地图片直接输出，TXT 远程链接 302 跳转到原始 URL。
-- `GET /?json=1`：返回当前域名下的短图片链接 JSON。
-- 浏览器直接打开 `/`、`/erciyuan` 时返回一个展示图片的 HTML 页面，刷新会重新随机。
-- 作为 `<img>` 或 CSS 背景请求时，接口返回 302 到短图片链接。
-- HTTP 请求只查 SQLite，不实时扫描目录，避免图片过多时卡住。
+## Features
 
-只有 `config.json` 的 `folders` 中配置过的顶层目录可以访问。本地存在但未配置的目录会返回 `404`。
+- `GET /`: randomly selects from all configured categories and their subdirectories.
+- `GET /:folder`: randomly selects from a configured category and its subdirectories.
+- `GET /:folder/:subPath`: randomly selects from a specific subcategory path.
+- `GET /:folder/:id.ext`: serves an indexed short image URL. Local images are streamed by the server, while remote TXT links return a 302 redirect to the original URL.
+- `GET /?json=1`: returns JSON with a short image URL under the current domain.
+- Opening `/` or `/erciyuan` directly in a browser returns an HTML image viewer page. Refreshing the page picks a new image.
+- Requests from `<img>` tags or CSS backgrounds receive a 302 redirect to the short image URL.
+- HTTP requests read from SQLite only. Directory scanning is never done during normal requests.
 
-## 源码与运行数据
+Only top-level folders listed in the local `config.json` under `folders` are accessible. Local folders that exist but are not configured return `404`.
 
-仓库只提交源码、配置模板和文档，不提交运行数据：
+## Source And Runtime Data
 
-- `.runtime/`：SQLite、索引锁、索引日志。
-- `images/`：本地图片目录。
-- `test-image/`：临时测试图片。
-- `tests/`：本地测试脚本。
+The repository only tracks source code, configuration templates, and documentation. Runtime data and local configuration are intentionally ignored:
 
-部署后在服务器本地创建图片目录，例如 `images/erciyuan`，再执行索引命令。
+- `config.json`: local runtime configuration. Copy it from `config.example.json`.
+- `.runtime/`: SQLite database, index lock, and index logs.
+- `images/`: local image storage.
+- `test-image/`: temporary test images.
+- `tests/`: local-only test scripts.
 
-## 配置
+After deployment, copy `config.example.json` to `config.json`, create local image folders on the server, for example `images/erciyuan`, then run the index command.
 
-默认配置读取 `images/erciyuan`：
+## Configuration
+
+The repository provides `config.example.json`. Copy it before running the app:
+
+```powershell
+Copy-Item config.example.json config.json
+```
+
+The default example reads from `images/erciyuan`:
 
 ```json
 {
@@ -65,7 +74,7 @@
 }
 ```
 
-生产环境建议设置 `server.allowedHosts`，例如：
+For production, set `server.allowedHosts`, for example:
 
 ```json
 {
@@ -75,9 +84,9 @@
 }
 ```
 
-如果服务位于可信反向代理后面，才将 `server.trustProxy` 改为 `true`。
+Set `server.trustProxy` to `true` only when the app is behind a trusted reverse proxy.
 
-## 目录示例
+## Directory Example
 
 ```text
 images/
@@ -89,67 +98,67 @@ images/
       links.txt
 ```
 
-- `/` 包含所有配置分类、子目录和 TXT 链接。
-- `/erciyuan` 包含 `erciyuan` 及其全部子目录。
-- `/erciyuan/wallpaper` 只从对应子目录及其子目录随机。
+- `/` includes all configured categories, subdirectories, and TXT links.
+- `/erciyuan` includes `erciyuan` and all of its subdirectories.
+- `/erciyuan/wallpaper` only selects from that subdirectory path and its children.
 
-## 索引
+## Indexing
 
-HTTP 请求不会扫描目录。新增、删除、移动图片，或修改 `links.txt` 后，需要重新索引。
+HTTP requests never scan directories. Rebuild the index after adding, deleting, moving images, or editing `links.txt`.
 
-你本机 PHP 路径：
+Local PHP path used during development:
 
 ```text
 D:\phpstudy_pro\Extensions\php\php8.2.9nts
 ```
 
-当前 PHP 的默认 `php.ini` 包含 PHP 8.2 不再支持的 `track_errors`，命令行建议加 `-n` 并手动启用 SQLite：
+The default `php.ini` on this machine contains the removed PHP 8.2 option `track_errors`, so CLI commands should use `-n` and enable SQLite extensions explicitly:
 
 ```powershell
-D:\phpstudy_pro\Extensions\php\php8.2.9nts\php.exe -n -d extension_dir=D:\phpstudy_pro\Extensions\php\php8.2.9nts\ext -d extension=pdo_sqlite -d extension=sqlite3 cli.php index
+D:\phpstudy_pro\Extensions\php\php8.2.9nts\php.exe -n -d extension_dir=D:\phpstudy_pro\Extensions\php\php8.2.9nts\ext -d extension=pdo_sqlite -d extension=sqlite3 bin\console.php index
 ```
 
-查看索引状态：
+Show index status:
 
 ```powershell
-D:\phpstudy_pro\Extensions\php\php8.2.9nts\php.exe -n -d extension_dir=D:\phpstudy_pro\Extensions\php\php8.2.9nts\ext -d extension=pdo_sqlite -d extension=sqlite3 cli.php status
+D:\phpstudy_pro\Extensions\php\php8.2.9nts\php.exe -n -d extension_dir=D:\phpstudy_pro\Extensions\php\php8.2.9nts\ext -d extension=pdo_sqlite -d extension=sqlite3 bin\console.php status
 ```
 
-只重建单个分类：
+Rebuild a single category:
 
 ```powershell
-D:\phpstudy_pro\Extensions\php\php8.2.9nts\php.exe -n -d extension_dir=D:\phpstudy_pro\Extensions\php\php8.2.9nts\ext -d extension=pdo_sqlite -d extension=sqlite3 cli.php index --folder=erciyuan
+D:\phpstudy_pro\Extensions\php\php8.2.9nts\php.exe -n -d extension_dir=D:\phpstudy_pro\Extensions\php\php8.2.9nts\ext -d extension=pdo_sqlite -d extension=sqlite3 bin\console.php index --folder=erciyuan
 ```
 
-查看已索引路径：
+List indexed paths:
 
 ```powershell
-D:\phpstudy_pro\Extensions\php\php8.2.9nts\php.exe -n -d extension_dir=D:\phpstudy_pro\Extensions\php\php8.2.9nts\ext -d extension=pdo_sqlite -d extension=sqlite3 cli.php paths
+D:\phpstudy_pro\Extensions\php\php8.2.9nts\php.exe -n -d extension_dir=D:\phpstudy_pro\Extensions\php\php8.2.9nts\ext -d extension=pdo_sqlite -d extension=sqlite3 bin\console.php paths
 ```
 
-检查远程链接：
+Check remote links:
 
 ```powershell
 $env:RI_HTTP_PROXY="http://127.0.0.1:10808"
 $env:RI_LINKCHECK_VERIFY_TLS="0"
-D:\phpstudy_pro\Extensions\php\php8.2.9nts\php.exe -n -d extension_dir=D:\phpstudy_pro\Extensions\php\php8.2.9nts\ext -d extension=curl -d extension=pdo_sqlite -d extension=sqlite3 cli.php check-links
+D:\phpstudy_pro\Extensions\php\php8.2.9nts\php.exe -n -d extension_dir=D:\phpstudy_pro\Extensions\php\php8.2.9nts\ext -d extension=curl -d extension=pdo_sqlite -d extension=sqlite3 bin\console.php check-links
 ```
 
-`RI_HTTP_PROXY` 只在当前网络需要代理时设置。`RI_LINKCHECK_VERIFY_TLS=0` 只建议本地测试使用，生产环境保持 TLS 校验开启。
+Set `RI_HTTP_PROXY` only when the current network needs a proxy. `RI_LINKCHECK_VERIFY_TLS=0` is only recommended for local testing; keep TLS verification enabled in production.
 
-## 本地运行
+## Local Run
 
-推荐使用 `public/` 作为 Web 根目录：
+Use `public/` as the web root:
 
 ```powershell
 D:\phpstudy_pro\Extensions\php\php8.2.9nts\php.exe -n -d extension_dir=D:\phpstudy_pro\Extensions\php\php8.2.9nts\ext -d extension=pdo_sqlite -d extension=sqlite3 -S 127.0.0.1:3000 -t public public/index.php
 ```
 
-测试或访问完成后停止服务进程。
+Stop the local server process after testing.
 
-## 管理接口
+## Admin API
 
-`/_api` 管理接口默认关闭。需要启用时：
+The `/_api` admin endpoints are disabled by default. To enable them:
 
 ```json
 {
@@ -158,48 +167,48 @@ D:\phpstudy_pro\Extensions\php\php8.2.9nts\php.exe -n -d extension_dir=D:\phpstu
 }
 ```
 
-请求时使用 Bearer Token：
+Use a Bearer token:
 
 ```powershell
 curl.exe -H "Authorization: Bearer replace-with-a-long-random-token" http://127.0.0.1:3000/_api/index
 ```
 
-默认不接受 `?token=`，避免 token 出现在浏览器历史或访问日志中。确实需要时可将 `adminAllowQueryToken` 改为 `true`。
+`?token=` is not accepted by default, so tokens do not appear in browser history or access logs. Set `adminAllowQueryToken` to `true` only if you explicitly need query tokens.
 
-## 安全默认值
+## Security Defaults
 
-- 推荐 Web 根目录指向 `public/`。
-- 根目录 `.htaccess` 会阻止访问 `config.json`、`app/`、`.runtime/`、`images/`、`tests/` 等敏感路径。
-- 只允许 `GET` 和 `HEAD` 请求。
-- 顶层分类必须在 `folders` 白名单中。
-- 路径会拒绝 `../`、反斜杠和空字节。
-- 短链接不暴露原始文件名。
-- SVG 默认禁用，避免脚本型 SVG 风险。
-- 本地输出前会再次校验真实路径仍在分类目录内，并拒绝符号链接。
-- TXT 远程链接会拒绝 `localhost`、内网 IP、保留地址和云 metadata 主机；跳转检测也会校验重定向目标。
-- 远程链接可用 `linkCheck.allowedHosts` 进一步限制允许的域名。
+- Use `public/` as the web root.
+- `public/.htaccess` handles Apache rewrites and blocks dotfiles. The application entrypoint lives in `public/`.
+- Only `GET` and `HEAD` are allowed.
+- Top-level categories must be present in the `folders` allowlist.
+- Paths reject `../`, backslashes, and null bytes.
+- Short URLs do not expose original file names.
+- SVG is disabled by default to avoid scriptable SVG risks.
+- Local image output verifies the resolved real path remains inside the category directory and rejects symlinks.
+- TXT remote links reject localhost, private IPs, reserved addresses, and cloud metadata hosts. Redirect targets are checked too.
+- `linkCheck.allowedHosts` can further restrict allowed remote image domains.
 
-## 定时索引
+## Scheduled Indexing
 
-Windows 任务计划程序每小时索引一次：
+Windows Task Scheduler example, hourly:
 
 ```powershell
-schtasks /Create /SC HOURLY /TN "RandomPicApiIndex" /TR "\"D:\phpstudy_pro\Extensions\php\php8.2.9nts\php.exe\" -n -d extension_dir=D:\phpstudy_pro\Extensions\php\php8.2.9nts\ext -d extension=pdo_sqlite -d extension=sqlite3 \"D:\project\api-image\cli.php\" index" /F
+schtasks /Create /SC HOURLY /TN "RandomPicApiIndex" /TR "\"D:\phpstudy_pro\Extensions\php\php8.2.9nts\php.exe\" -n -d extension_dir=D:\phpstudy_pro\Extensions\php\php8.2.9nts\ext -d extension=pdo_sqlite -d extension=sqlite3 \"D:\project\api-image\bin\console.php\" index" /F
 ```
 
-Linux cron 示例：
+Linux cron example:
 
 ```cron
-0 * * * * cd /path/to/api-image && php cli.php index >/tmp/random-pic-index.log 2>&1
+0 * * * * cd /path/to/api-image && php bin/console.php index >/tmp/random-pic-index.log 2>&1
 ```
 
-索引命令带文件锁，同一时间只允许一个索引任务运行。SQLite 默认启用 WAL，接口读取和索引写入可以更稳定地并发。
+The index command uses a file lock, so only one indexing task can run at a time. SQLite WAL mode is enabled for more stable concurrent reads and index writes.
 
-## 部署提示
+## Deployment
 
-Apache 或 Nginx 推荐将站点根目录指向 `public/`。
+Apache or Nginx should point the site root to `public/`.
 
-Nginx 示例：
+Nginx example:
 
 ```nginx
 root /path/to/api-image/public;
@@ -209,4 +218,4 @@ location / {
 }
 ```
 
-默认由 PHP 输出本地图片。高并发或大图场景可以在 `config.json` 中将 `sendfile.mode` 设置为 `x-sendfile` 或 `x-accel`，交给 Apache/Nginx 输出文件。
+By default, PHP streams local images. For high concurrency or large files, set `sendfile.mode` to `x-sendfile` or `x-accel` in your local `config.json` and let Apache or Nginx serve image files.

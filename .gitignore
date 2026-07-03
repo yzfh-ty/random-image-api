@@ -1,8 +1,10 @@
 .env
 .env.*
+config.json
 *.log
 .runtime/
 .reference-*/
+DEVELOPMENT.md
 test-image/
 images/
 tests/

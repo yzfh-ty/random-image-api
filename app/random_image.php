@@ -68,12 +68,12 @@ function ri_cli_main(string $baseDir, array $argv): int
         }
 
         if ($command === 'help' || $command === '--help' || $command === '-h') {
-            ri_cli_print_usage($argv[0] ?? 'cli.php');
+            ri_cli_print_usage($argv[0] ?? 'bin/console.php');
             return 0;
         }
 
         fwrite(STDERR, "Unknown command: {$command}\n\n");
-        ri_cli_print_usage($argv[0] ?? 'cli.php');
+        ri_cli_print_usage($argv[0] ?? 'bin/console.php');
         return 1;
     } catch (Throwable $error) {
         fwrite(STDERR, 'Error: ' . $error->getMessage() . "\n");
