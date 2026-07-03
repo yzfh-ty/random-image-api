@@ -4,3 +4,5 @@
 .runtime/
 .reference-*/
 test-image/
+images/
+tests/

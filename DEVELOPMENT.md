@@ -10,36 +10,33 @@
 | 索引 | SQLite / PDO SQLite |
 | 配置 | `config.json` |
 | 部署 | PHPStudy、Nginx/PHP-FPM、Apache、Docker |
-| 测试 | 原生 PHP smoke test |
+| 测试 | 本地 smoke / HTTP 回归测试，不随源码提交 |
 
 选择 PHP + SQLite 的原因：
 
 - 随机图片 API 主要是文件输出、302 跳转和轻量查询，PHP 部署成本低。
 - SQLite 可以把大量图片和 TXT 远程链接提前索引，避免每次请求递归扫描目录。
-- 短链接可以使用稳定数字 ID，例如 `/erciyuan/1.png`，不暴露原始长文件名。
+- HTTP 随机使用数据库计数和随机 offset，只取一条记录，避免把大分类整池读入 PHP。
+- 短链接使用稳定数字 ID，例如 `/erciyuan/1.png`，不暴露原始长文件名。
 - 当前需求支持配置白名单、递归子目录分类、TXT 远程链接、当前域名短链接、刷新避免连续重复。
 
 ## 目录约定
 
 ```text
 api-image/
+  public/
+    index.php
   index.php
   cli.php
   config.json
   app/
     random_image.php
-  images/
-    erciyuan/
-      001.jpg
-      links.txt
-      wallpaper/
-        002.jpg
-        links.txt
-  .runtime/
-    image-index.sqlite
+  images/        本地图片目录，不提交
+  tests/         本地测试脚本，不提交
+  .runtime/      SQLite、锁、日志，不提交
 ```
 
-`.runtime/` 是运行时目录，不提交到 git。
+生产部署推荐将 Web 根目录指向 `public/`。根目录入口 `index.php` 保留给必须直接部署到项目根目录的 Apache/PHPStudy 场景，根目录 `.htaccess` 会阻止敏感路径被直接访问。
 
 ## 配置
 
@@ -48,19 +45,46 @@ api-image/
   "server": {
     "host": "0.0.0.0",
     "port": 3000,
-    "trustProxy": true
+    "trustProxy": false,
+    "allowedHosts": []
   },
   "imageRoot": "images",
   "folders": ["erciyuan"],
   "linkFiles": ["links.txt"],
   "adminPrefix": "/_api",
+  "adminEnabled": false,
+  "adminToken": "",
+  "adminAllowQueryToken": false,
   "indexDatabase": ".runtime/image-index.sqlite",
-  "imageExtensions": [".jpg", ".jpeg", ".png", ".gif", ".webp", ".avif", ".bmp", ".svg"],
-  "defaultMode": "redirect"
+  "indexLock": ".runtime/index.lock",
+  "indexLog": ".runtime/index.log",
+  "imageExtensions": [".jpg", ".jpeg", ".png", ".gif", ".webp", ".avif", ".bmp"],
+  "allowSvg": false,
+  "defaultMode": "redirect",
+  "linkCheck": {
+    "timeoutSeconds": 5,
+    "userAgent": "random-image-api/1.0",
+    "proxy": "",
+    "verifyTls": true,
+    "allowedHosts": []
+  },
+  "sendfile": {
+    "mode": "php",
+    "xAccelPrefix": ""
+  }
 }
 ```
 
-只有 `folders` 中配置过的顶层目录可以通过 URL 访问。
+关键配置：
+
+- `folders`：顶层分类白名单，只有这里配置过的目录能访问。
+- `server.allowedHosts`：生产环境建议填写真实域名，防止 Host 头污染生成的短链接。
+- `server.trustProxy`：只有在可信反向代理后面才启用。
+- `adminEnabled`：管理接口默认关闭。
+- `adminToken` / `RI_ADMIN_TOKEN`：管理接口启用时必须提供。
+- `adminAllowQueryToken`：默认关闭，建议只使用 `Authorization: Bearer ...`。
+- `allowSvg`：默认关闭；除非确认 SVG 来源可信，否则不要启用。
+- `linkCheck.allowedHosts`：可限制 TXT 远程链接只能来自指定域名或通配域名，例如 `*.example.com`。
 
 ## 索引流程
 
@@ -72,22 +96,54 @@ api-image/
 D:\phpstudy_pro\Extensions\php\php8.2.9nts\php.exe -n -d extension_dir=D:\phpstudy_pro\Extensions\php\php8.2.9nts\ext -d extension=pdo_sqlite -d extension=sqlite3 cli.php index
 ```
 
+只索引单个分类：
+
+```powershell
+D:\phpstudy_pro\Extensions\php\php8.2.9nts\php.exe -n -d extension_dir=D:\phpstudy_pro\Extensions\php\php8.2.9nts\ext -d extension=pdo_sqlite -d extension=sqlite3 cli.php index --folder=erciyuan
+```
+
 查看状态：
 
 ```powershell
 D:\phpstudy_pro\Extensions\php\php8.2.9nts\php.exe -n -d extension_dir=D:\phpstudy_pro\Extensions\php\php8.2.9nts\ext -d extension=pdo_sqlite -d extension=sqlite3 cli.php status
 ```
 
-定时索引本质上也是定时执行 `cli.php index`。可以用 Windows 任务计划程序、Linux cron 或面板自带计划任务。
+查看已索引路径：
+
+```powershell
+D:\phpstudy_pro\Extensions\php\php8.2.9nts\php.exe -n -d extension_dir=D:\phpstudy_pro\Extensions\php\php8.2.9nts\ext -d extension=pdo_sqlite -d extension=sqlite3 cli.php paths
+```
+
+检查远程链接：
+
+```powershell
+$env:RI_HTTP_PROXY="http://127.0.0.1:10808"
+$env:RI_LINKCHECK_VERIFY_TLS="0"
+D:\phpstudy_pro\Extensions\php\php8.2.9nts\php.exe -n -d extension_dir=D:\phpstudy_pro\Extensions\php\php8.2.9nts\ext -d extension=curl -d extension=pdo_sqlite -d extension=sqlite3 cli.php check-links
+```
+
+定时索引本质上也是定时执行 `cli.php index`，可以用 Windows 任务计划程序、Linux cron 或面板计划任务。
+
+索引命令使用 `.runtime/index.lock` 文件锁，同一时间只允许一个索引进程运行，避免手动索引和定时索引同时写 SQLite。
 
 索引过程：
 
 1. 读取 `config.json`。
 2. 只扫描 `folders` 白名单内的顶层目录。
-3. 递归读取本地图片。
-4. 读取每个目录下配置好的 `links.txt`。
-5. 写入 SQLite。
-6. 删除已经不存在于本次扫描结果里的旧索引。
+3. 跳过符号链接目录和符号链接文件。
+4. 递归读取允许扩展名的本地图片。
+5. 读取每个目录下配置好的 `links.txt`。
+6. 写入 SQLite。
+7. 删除已经不存在于本次扫描结果里的旧索引。
+8. 写入 `.runtime/index.log` JSON Lines 日志。
+
+SQLite 打开时启用：
+
+```sql
+PRAGMA journal_mode = WAL;
+PRAGMA synchronous = NORMAL;
+PRAGMA busy_timeout = 5000;
+```
 
 ## SQLite 表
 
@@ -110,7 +166,18 @@ folder    顶层分类
 image_id  image_index.id
 ```
 
-这样 `/erciyuan` 和 `/erciyuan/wallpaper` 都只需要查表，不需要扫描文件系统。
+`remote_link_checks` 保存远程链接最近一次检测结果：
+
+```text
+folder       顶层分类
+image_id     image_index.id
+url          原始远程URL
+ok           1 / 0
+status_code  HTTP 状态码
+error        错误信息
+duration_ms  检测耗时
+checked_at   检测时间
+```
 
 ## 路由
 
@@ -119,15 +186,27 @@ image_id  image_index.id
 - `GET /:folder/:subPath`：从指定子目录分类随机。
 - `GET /:folder/:id.ext`：访问短图片链接。
 - `GET /?json=1`：返回 JSON。
-- `GET /_api/index`：查看索引状态。
-- `GET /_api/folders`：查看分类统计。
-- `GET /_api/folders/:folder`：查看单个分类统计。
+- `GET /_api/index`：管理接口启用并通过 Bearer Token 后查看索引状态。
+- `GET /_api/folders`：管理接口启用并通过 Bearer Token 后查看分类统计。
 
 浏览器请求规则：
 
 - 当 `Accept` 包含 `text/html` 且未传 `?json=1` 时，随机接口返回 HTML 页面展示图片。
 - HTML 模式下地址栏保持 `/`、`/erciyuan` 或 `/erciyuan/subPath`，刷新页面会重新随机。
 - 非 HTML 请求返回 302 到短图片链接，方便作为图片 API、`<img>` 或 CSS 背景使用。
+- 仅允许 `GET` 和 `HEAD`。
+
+## 随机算法
+
+HTTP 请求不会加载整个随机池。
+
+流程：
+
+1. 根据 `/`、`/:folder` 或 `/:folder/:subPath` 生成 SQL 条件。
+2. 先 `COUNT(*)` 得到候选数量。
+3. 如果当前 Session 里有上一次返回的图片，并且候选数量大于 1，则在 SQL 里排除上一张。
+4. 使用 `random_int()` 生成 offset。
+5. `LIMIT 1 OFFSET :offset` 只读取一条图片记录。
 
 ## 子目录分类
 
@@ -158,9 +237,48 @@ images/erciyuan/wallpaper/002.jpg
 - 空行忽略。
 - `#` 开头的注释忽略。
 - 只接受 `http://` 和 `https://`。
+- 拒绝控制字符、反斜杠、localhost、内网 IP、保留地址和云 metadata 主机。
 - 同一个 `links.txt` 内重复链接会去重。
 - 返回给用户时转换为当前域名下的短链接，例如 `/erciyuan/3.jpg`。
 - 访问远程短链接时由服务端 302 跳转到原始远程 URL。
+- `check-links` 命令会对已索引远程链接做 HEAD/GET 检测，并校验重定向目标。
+- 检测优先使用 PHP cURL 扩展；没有 cURL 时退回 PHP stream。
+- 当前网络需要代理时，可以设置 `linkCheck.proxy` 或临时环境变量 `RI_HTTP_PROXY`。
+
+## 本地图片输出
+
+默认模式：
+
+```json
+{
+  "sendfile": {
+    "mode": "php"
+  }
+}
+```
+
+生产环境可选：
+
+- `"x-sendfile"`：输出 `X-Sendfile` 头，由 Apache/lighttpd 等支持模块发送文件。
+- `"x-accel"`：输出 `X-Accel-Redirect` 头，由 Nginx 内部路径发送文件。
+
+Nginx `x-accel` 示例：
+
+```json
+{
+  "sendfile": {
+    "mode": "x-accel",
+    "xAccelPrefix": "/_protected_images"
+  }
+}
+```
+
+```nginx
+location /_protected_images/ {
+    internal;
+    alias /path/to/api-image/images/;
+}
+```
 
 ## 刷新换图
 
@@ -174,11 +292,17 @@ images/erciyuan/wallpaper/002.jpg
 
 ## 安全要求
 
+- Web 根目录推荐使用 `public/`。
+- 根目录 `.htaccess` 阻止直接访问配置、源码、运行时目录、图片目录和测试目录。
 - 禁止 `../` 路径穿越。
 - 顶层路径必须命中 `config.json` 的 `folders`。
 - 未配置目录即使真实存在也返回 `404`。
 - 不返回服务器真实文件路径。
 - 不暴露原始长文件名。
+- 本地图片输出前用 `realpath` 重新确认路径仍在分类目录内。
+- 拒绝扫描和输出符号链接文件。
+- 管理接口默认关闭；启用后默认只接受 Bearer Token。
+- 默认禁用 SVG。
 - `_api`、`_assets`、`_remote` 是保留路径，不能作为顶层分类名。
 
 ## 本地验证
@@ -192,7 +316,9 @@ D:\phpstudy_pro\Extensions\php\php8.2.9nts\php.exe
 由于当前 `php.ini` 存在 PHP 8.2 不支持的 `track_errors`，命令行运行建议加 `-n`，并启用 SQLite 扩展：
 
 ```powershell
-D:\phpstudy_pro\Extensions\php\php8.2.9nts\php.exe -n -d extension_dir=D:\phpstudy_pro\Extensions\php\php8.2.9nts\ext -d extension=pdo_sqlite -d extension=sqlite3 tests\smoke.php
+D:\phpstudy_pro\Extensions\php\php8.2.9nts\php.exe -n -l app\random_image.php
 D:\phpstudy_pro\Extensions\php\php8.2.9nts\php.exe -n -d extension_dir=D:\phpstudy_pro\Extensions\php\php8.2.9nts\ext -d extension=pdo_sqlite -d extension=sqlite3 cli.php index
-D:\phpstudy_pro\Extensions\php\php8.2.9nts\php.exe -n -d extension_dir=D:\phpstudy_pro\Extensions\php\php8.2.9nts\ext -d extension=pdo_sqlite -d extension=sqlite3 -S 127.0.0.1:3000 index.php
+D:\phpstudy_pro\Extensions\php\php8.2.9nts\php.exe -n -d extension_dir=D:\phpstudy_pro\Extensions\php\php8.2.9nts\ext -d extension=pdo_sqlite -d extension=sqlite3 -S 127.0.0.1:3000 -t public public/index.php
 ```
+
+每次 HTTP 测试完成后，停止本地服务进程。
