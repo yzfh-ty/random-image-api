@@ -1,32 +1,3 @@
 {
-  "server": {
-    "host": "0.0.0.0",
-    "port": 3000,
-    "trustProxy": false,
-    "allowedHosts": []
-  },
-  "imageRoot": "images",
-  "folders": ["erciyuan"],
-  "linkFiles": ["links.txt"],
-  "adminPrefix": "/_api",
-  "adminEnabled": false,
-  "adminToken": "",
-  "adminAllowQueryToken": false,
-  "indexDatabase": ".runtime/image-index.sqlite",
-  "indexLock": ".runtime/index.lock",
-  "indexLog": ".runtime/index.log",
-  "imageExtensions": [".jpg", ".jpeg", ".png", ".gif", ".webp", ".avif", ".bmp"],
-  "allowSvg": false,
-  "defaultMode": "redirect",
-  "linkCheck": {
-    "timeoutSeconds": 5,
-    "userAgent": "random-image-api/1.0",
-    "proxy": "",
-    "verifyTls": true,
-    "allowedHosts": []
-  },
-  "sendfile": {
-    "mode": "php",
-    "xAccelPrefix": ""
-  }
+  "folders": ["erciyuan"]
 }

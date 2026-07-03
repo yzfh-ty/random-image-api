@@ -16,74 +16,54 @@
 - 请求可用 `?type=pc` 或 `?type=mobile` 指定类型；不传时会根据 Client Hints 或 User-Agent 自动判断。
 - HTTP 请求只查 SQLite，不实时扫描目录，避免图片过多时卡住。
 
-只有本地 `config.json` 的 `folders` 中配置过的顶层目录可以访问。本地存在但未配置的目录会返回 `404`。
+只有 `config.json` 或 `RI_FOLDERS` 中配置过的顶层目录可以访问。本地存在但未配置的目录会返回 `404`。
 
 ## 源码与运行数据
 
 仓库只提交源码、配置模板和文档，不提交运行数据和本地配置：
 
 - `config.json`：本地运行配置，从 `config.example.json` 复制生成。
+- `.env`：本地环境变量覆盖配置，需要时从 `.env.example` 复制生成。
 - `.runtime/`：SQLite、索引锁、索引日志和本地测试临时文件。
 - `images/`：本地图片目录。
 
-部署后先复制 `config.example.json` 为 `config.json`，再在服务器本地创建图片目录，例如 `images/erciyuan`，最后执行索引命令。
+部署后先复制 `config.example.json` 为 `config.json`，需要覆盖运行参数时再复制 `.env.example` 为 `.env`，然后在服务器本地创建图片目录，例如 `images/erciyuan`，最后执行索引命令。
 
 ## 配置
 
-仓库提供 `config.example.json`。运行前先复制一份本地配置：
+仓库提供精简的 `config.example.json`。运行前先复制一份本地配置：
 
 ```powershell
 Copy-Item config.example.json config.json
 ```
 
-默认示例配置读取 `images/erciyuan`：
+通常 `config.json` 只需要写分类名：
 
 ```json
 {
-  "server": {
-    "host": "0.0.0.0",
-    "port": 3000,
-    "trustProxy": false,
-    "allowedHosts": []
-  },
-  "imageRoot": "images",
-  "folders": ["erciyuan"],
-  "linkFiles": ["links.txt"],
-  "adminPrefix": "/_api",
-  "adminEnabled": false,
-  "adminToken": "",
-  "adminAllowQueryToken": false,
-  "indexDatabase": ".runtime/image-index.sqlite",
-  "indexLock": ".runtime/index.lock",
-  "indexLog": ".runtime/index.log",
-  "imageExtensions": [".jpg", ".jpeg", ".png", ".gif", ".webp", ".avif", ".bmp"],
-  "allowSvg": false,
-  "defaultMode": "redirect",
-  "linkCheck": {
-    "timeoutSeconds": 5,
-    "userAgent": "random-image-api/1.0",
-    "proxy": "",
-    "verifyTls": true,
-    "allowedHosts": []
-  },
-  "sendfile": {
-    "mode": "php",
-    "xAccelPrefix": ""
-  }
+  "folders": ["erciyuan"]
 }
 ```
 
-生产环境建议设置 `server.allowedHosts`，例如：
+所有运行参数都可以通过真实环境变量或本地 `.env` 覆盖。优先级为：系统环境变量、`.env`、`config.json`、程序默认值。
 
-```json
-{
-  "server": {
-    "allowedHosts": ["example.com", "www.example.com"]
-  }
-}
+```powershell
+Copy-Item .env.example .env
 ```
 
-如果服务位于可信反向代理后面，才将 `server.trustProxy` 改为 `true`。
+常用 `.env` 覆盖项：
+
+```dotenv
+RI_FOLDERS=erciyuan,fengjing
+RI_ALLOWED_HOSTS=example.com,www.example.com
+RI_TRUST_PROXY=false
+RI_ADMIN_ENABLED=false
+RI_ADMIN_TOKEN=
+RI_DEFAULT_MODE=redirect
+RI_HTTP_PROXY=
+```
+
+完整变量列表见 `.env.example`。只有服务位于可信反向代理后面，才设置 `RI_TRUST_PROXY=true`。
 
 ## 目录示例
 
@@ -181,11 +161,9 @@ D:\phpstudy_pro\Extensions\php\php8.2.9nts\php.exe -n -d extension_dir=D:\phpstu
 
 `/_api` 管理接口默认关闭。需要启用时：
 
-```json
-{
-  "adminEnabled": true,
-  "adminToken": "replace-with-a-long-random-token"
-}
+```dotenv
+RI_ADMIN_ENABLED=true
+RI_ADMIN_TOKEN=replace-with-a-long-random-token
 ```
 
 请求时使用 Bearer Token：
@@ -194,20 +172,20 @@ D:\phpstudy_pro\Extensions\php\php8.2.9nts\php.exe -n -d extension_dir=D:\phpstu
 curl.exe -H "Authorization: Bearer replace-with-a-long-random-token" http://127.0.0.1:3000/_api/index
 ```
 
-默认不接受 `?token=`，避免 token 出现在浏览器历史或访问日志中。确实需要时可将 `adminAllowQueryToken` 改为 `true`。
+默认不接受 `?token=`，避免 token 出现在浏览器历史或访问日志中。确实需要时可设置 `RI_ADMIN_ALLOW_QUERY_TOKEN=true`。
 
 ## 安全默认值
 
 - 推荐 Web 根目录指向 `public/`。
 - `public/.htaccess` 负责 Apache 路由重写并阻止访问点文件；应用入口只保留在 `public/`。
 - 只允许 `GET` 和 `HEAD` 请求。
-- 顶层分类必须在 `folders` 白名单中。
+- 顶层分类必须配置在 `config.json` 或 `RI_FOLDERS` 中。
 - 路径会拒绝 `../`、反斜杠和空字节。
 - 短链接不暴露原始文件名。
 - SVG 默认禁用，避免脚本型 SVG 风险。
 - 本地输出前会再次校验真实路径仍在分类目录内，并拒绝符号链接。
 - TXT 远程链接会拒绝 `localhost`、内网 IP、保留地址和云 metadata 主机；跳转检测也会校验重定向目标。
-- 远程链接可用 `linkCheck.allowedHosts` 进一步限制允许的域名。
+- 远程链接可用 `RI_LINKCHECK_ALLOWED_HOSTS` 进一步限制允许的域名。
 
 ## 定时索引
 
@@ -239,4 +217,4 @@ location / {
 }
 ```
 
-默认由 PHP 输出本地图片。高并发或大图场景可以在本地 `config.json` 中将 `sendfile.mode` 设置为 `x-sendfile` 或 `x-accel`，交给 Apache/Nginx 输出文件。
+默认由 PHP 输出本地图片。高并发或大图场景可以设置 `RI_SENDFILE_MODE=x-sendfile` 或 `RI_SENDFILE_MODE=x-accel`，交给 Apache/Nginx 输出文件。
