@@ -13,6 +13,8 @@
 - `GET /?json=1`：返回当前域名下的短图片链接 JSON。
 - 浏览器直接打开 `/`、`/erciyuan` 时返回一个展示图片的 HTML 页面，刷新会重新随机。
 - 作为 `<img>` 或 CSS 背景请求时，接口返回 302 到短图片链接。
+- 本地图片索引时会按宽高识别类型：横图为 `pc`，竖图为 `mobile`。
+- 请求可用 `?type=pc` 或 `?type=mobile` 指定类型；不传时会根据 Client Hints 或 User-Agent 自动判断。
 - HTTP 请求只查 SQLite，不实时扫描目录，避免图片过多时卡住。
 
 只有本地 `config.json` 的 `folders` 中配置过的顶层目录可以访问。本地存在但未配置的目录会返回 `404`。
@@ -101,6 +103,28 @@ images/
 - `/` 包含所有配置分类、子目录和 TXT 链接。
 - `/erciyuan` 包含 `erciyuan` 及其全部子目录。
 - `/erciyuan/wallpaper` 只从对应子目录及其子目录随机。
+
+## PC 和 Mobile 图片
+
+索引时，本地图片会按尺寸分类：
+
+- `pc`：宽度大于高度，适合 PC 横屏背景。
+- `mobile`：高度大于宽度，适合手机竖屏背景。
+- `square`：宽高相同。
+- `unknown`：无法读取尺寸，或来自 TXT 远程链接。
+
+随机接口支持显式指定类型：
+
+```text
+/erciyuan?type=pc
+/erciyuan?type=mobile
+```
+
+也支持别名：`desktop`、`landscape`、`horizontal` 等同于 `pc`；`phone`、`portrait`、`vertical` 等同于 `mobile`。
+
+不传 `type` 时，浏览器请求会根据 Client Hints 或 User-Agent 自动判断。作为 CSS 背景调用时，浏览器通常也会带 User-Agent，所以多数情况下可以自动适配；如果你想强制背景方向，建议显式使用 `?type=pc` 或 `?type=mobile`。
+
+`links.txt` 里的远程链接默认记为 `unknown`，因为服务不会下载远程图片来读取尺寸。不带类型过滤时会参与随机；请求 `pc` 或 `mobile` 时会被排除。
 
 ## 索引
 

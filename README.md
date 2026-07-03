@@ -13,6 +13,8 @@ A PHP 8.2 + SQLite random image API. It randomly serves images from configured l
 - `GET /?json=1`: returns JSON with a short image URL under the current domain.
 - Opening `/` or `/erciyuan` directly in a browser returns an HTML image viewer page. Refreshing the page picks a new image.
 - Requests from `<img>` tags or CSS backgrounds receive a 302 redirect to the short image URL.
+- Local images are indexed as `pc` for landscape images and `mobile` for portrait images.
+- Requests can filter image type with `?type=pc` or `?type=mobile`; without this parameter, browser requests are auto-detected from Client Hints or User-Agent.
 - HTTP requests read from SQLite only. Directory scanning is never done during normal requests.
 
 Only top-level folders listed in the local `config.json` under `folders` are accessible. Local folders that exist but are not configured return `404`.
@@ -101,6 +103,28 @@ images/
 - `/` includes all configured categories, subdirectories, and TXT links.
 - `/erciyuan` includes `erciyuan` and all of its subdirectories.
 - `/erciyuan/wallpaper` only selects from that subdirectory path and its children.
+
+## PC And Mobile Images
+
+During indexing, local images are classified by dimensions:
+
+- `pc`: width is greater than height.
+- `mobile`: height is greater than width.
+- `square`: width equals height.
+- `unknown`: dimensions cannot be detected, or the image comes from a TXT remote link.
+
+Random endpoints support explicit type filtering:
+
+```text
+/erciyuan?type=pc
+/erciyuan?type=mobile
+```
+
+Aliases are also accepted: `desktop`, `landscape`, `horizontal` map to `pc`; `phone`, `portrait`, `vertical` map to `mobile`.
+
+When `type` is not provided, browser requests are auto-detected from Client Hints or User-Agent. This usually works for CSS background calls too, because browsers still send a User-Agent. Use `?type=pc` or `?type=mobile` when you need an exact background orientation regardless of the device detection result.
+
+Remote links from `links.txt` are indexed as `unknown`, because the service does not download remote images to inspect their dimensions. They are included when no type filter is active, and excluded when requesting `pc` or `mobile`.
 
 ## Indexing
 
