@@ -16,27 +16,17 @@ function ri_build_index(string $baseDir, ?string $onlyFolder = null): array
         $warnings = [];
 
         ri_append_index_log($config, $baseDir, 'index_started', ['folders' => $folders]);
-        $index->beginTransaction();
         try {
+            $folderPaths = ri_prepare_index_folders($config, $imageRoot, $folders, $warnings);
+            $index->beginTransaction();
+
             if ($fullRebuild) {
                 ri_remove_unconfigured_index_rows($index, $config['folders']);
             }
 
             ri_prepare_index_rebuild($index);
 
-            foreach ($folders as $folder) {
-                $folderPath = ri_resolve_path($imageRoot, $folder);
-
-                if (!is_dir($folderPath)) {
-                    $warnings[] = 'Configured folder does not exist: ' . $folder;
-                    continue;
-                }
-
-                if (!ri_is_inside($imageRoot, $folderPath)) {
-                    $warnings[] = 'Skipped unsafe folder path: ' . $folder;
-                    continue;
-                }
-
+            foreach ($folderPaths as $folder => $folderPath) {
                 ri_scan_category_for_index($config, $folder, $folderPath, $index, $warnings);
             }
 
@@ -76,6 +66,62 @@ function ri_build_index(string $baseDir, ?string $onlyFolder = null): array
         }
     });
 }
+
+function ri_prepare_index_folders(array $config, string $imageRoot, array $folders, array &$warnings): array
+{
+    $folderPaths = [];
+
+    foreach ($folders as $folder) {
+        $folderPath = ri_resolve_path($imageRoot, $folder);
+
+        if (!is_dir($folderPath)) {
+            $warnings[] = 'Configured folder does not exist: ' . $folder;
+            continue;
+        }
+
+        if (!ri_is_inside($imageRoot, $folderPath)) {
+            $warnings[] = 'Skipped unsafe folder path: ' . $folder;
+            continue;
+        }
+
+        ri_prepare_category_files_for_index($config, $folder, $folderPath, $warnings);
+        $folderPaths[$folder] = $folderPath;
+    }
+
+    return $folderPaths;
+}
+
+function ri_prepare_category_files_for_index(
+    array $config,
+    string $folder,
+    string $folderPath,
+    array &$warnings
+): void {
+    ri_ensure_managed_type_directories($folderPath, $folder, $warnings);
+    $entries = scandir($folderPath);
+    if ($entries === false) {
+        $warnings[] = 'Cannot read directory: ' . $folder;
+        return;
+    }
+
+    foreach ($entries as $entry) {
+        if ($entry === '.' || $entry === '..') {
+            continue;
+        }
+
+        $entryPath = $folderPath . DIRECTORY_SEPARATOR . $entry;
+        if (!is_file($entryPath) || is_link($entryPath) || !ri_is_inside($folderPath, $entryPath)) {
+            continue;
+        }
+
+        if (in_array($entry, $config['linkFiles'], true)) {
+            continue;
+        }
+
+        ri_organize_local_image_file($config, $folderPath, $entryPath, $warnings);
+    }
+}
+
 function ri_index_target_folders(array $config, ?string $onlyFolder): array
 {
     if ($onlyFolder === null) {
@@ -203,7 +249,6 @@ function ri_scan_category_for_index(
     PDO $index,
     array &$warnings
 ): void {
-    ri_ensure_managed_type_directories($folderPath, $folder, $warnings);
     $entries = scandir($folderPath);
     if ($entries === false) {
         $warnings[] = 'Cannot read directory: ' . $folder;
@@ -309,10 +354,20 @@ function ri_index_local_image_file(
     }
 
     $orientation = ri_detect_local_image_type($entryPath);
-    $entryPath = ri_move_image_to_type_folder($folderPath, $entryPath, $orientation, $warnings);
     $relativePath = ri_to_url_path(ri_relative_path($folderPath, $entryPath));
     $extensionWithoutDot = strtolower(pathinfo($entryPath, PATHINFO_EXTENSION));
     ri_remember_index_image($index, $folder, 'local', $relativePath, $extensionWithoutDot, $relativePath, $orientation);
+}
+
+function ri_organize_local_image_file(array $config, string $folderPath, string $entryPath, array &$warnings): void
+{
+    $extension = strtolower('.' . pathinfo($entryPath, PATHINFO_EXTENSION));
+    if (!in_array($extension, $config['imageExtensions'], true)) {
+        return;
+    }
+
+    $orientation = ri_detect_local_image_type($entryPath);
+    ri_move_image_to_type_folder($folderPath, $entryPath, $orientation, $warnings);
 }
 
 function ri_move_image_to_type_folder(string $folderPath, string $entryPath, string $orientation, array &$warnings): string
