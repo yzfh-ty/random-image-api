@@ -23,10 +23,8 @@
 仓库只提交源码、配置模板和文档，不提交运行数据和本地配置：
 
 - `config.json`：本地运行配置，从 `config.example.json` 复制生成。
-- `.runtime/`：SQLite、索引锁、索引日志。
+- `.runtime/`：SQLite、索引锁、索引日志和本地测试临时文件。
 - `images/`：本地图片目录。
-- `test-image/`：临时测试图片。
-- `tests/`：本地测试脚本。
 
 部署后先复制 `config.example.json` 为 `config.json`，再在服务器本地创建图片目录，例如 `images/erciyuan`，最后执行索引命令。
 

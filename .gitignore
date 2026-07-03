@@ -5,6 +5,4 @@ config.json
 .runtime/
 .reference-*/
 DEVELOPMENT.md
-test-image/
 images/
-tests/

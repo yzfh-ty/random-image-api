@@ -23,10 +23,8 @@ Only top-level folders listed in the local `config.json` under `folders` are acc
 The repository only tracks source code, configuration templates, and documentation. Runtime data and local configuration are intentionally ignored:
 
 - `config.json`: local runtime configuration. Copy it from `config.example.json`.
-- `.runtime/`: SQLite database, index lock, and index logs.
+- `.runtime/`: SQLite database, index lock, index logs, and local-only test scratch files.
 - `images/`: local image storage.
-- `test-image/`: temporary test images.
-- `tests/`: local-only test scripts.
 
 After deployment, copy `config.example.json` to `config.json`, create local image folders on the server, for example `images/erciyuan`, then run the index command.
 
