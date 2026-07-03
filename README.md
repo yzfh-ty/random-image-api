@@ -52,6 +52,39 @@ RI_HTTP_PROXY=
 
 Supported variables are listed in `.env.example`. By default, only `localhost`, `127.0.0.1`, and `[::1]` are accepted as request hosts; set `RI_ALLOWED_HOSTS` to your production domain names before deploying. Set `RI_TRUST_PROXY=true` only when the app is behind a trusted reverse proxy.
 
+### Configuration Reference
+
+| Variable | Meaning | Default / Example |
+| --- | --- | --- |
+| `RI_FOLDERS` | Comma-separated top-level image categories that can be requested. | `erciyuan,fengjing` |
+| `RI_IMAGE_ROOT` | Local image root directory. Relative paths are resolved from the project root. | `images` |
+| `RI_LINK_FILES` | TXT file names read from each category for remote image links. | `links.txt` |
+| `RI_DEFAULT_MODE` | Default random response mode: `redirect` or `json`. | `redirect` |
+| `RI_SERVER_HOST` | Bind host used by Docker/local PHP server startup. | `0.0.0.0` |
+| `RI_SERVER_PORT` | Port used by Docker/local PHP server startup. | `3000` |
+| `RI_ALLOWED_HOSTS` | Allowed request Host headers. Set production domains here. | `example.com,www.example.com` |
+| `RI_TRUST_PROXY` | Trust `X-Forwarded-Proto` and `X-Forwarded-Host` from a reverse proxy. | `false` |
+| `RI_ADMIN_ENABLED` | Enable read-only admin status endpoints. | `false` |
+| `RI_ADMIN_PREFIX` | Admin API route prefix. This prefix is reserved. | `/_api` |
+| `RI_ADMIN_TOKEN` | Bearer token required when admin API is enabled. | empty |
+| `RI_ADMIN_ALLOW_QUERY_TOKEN` | Allow admin token in `?token=`. Prefer Bearer tokens. | `false` |
+| `RI_INDEX_DATABASE` | SQLite index database path. | `.runtime/image-index.sqlite` |
+| `RI_INDEX_LOCK` | File lock path used to prevent concurrent index rebuilds. | `.runtime/index.lock` |
+| `RI_INDEX_LOG` | JSONL index log path. | `.runtime/index.log` |
+| `RI_INDEX_LOG_MAX_BYTES` | Rotate the index log after this size; `0` disables size rotation. | `1048576` |
+| `RI_INDEX_LOG_BACKUPS` | Number of rotated index log backups to keep. | `3` |
+| `RI_IMAGE_EXTENSIONS` | Allowed local image extensions. SVG is ignored unless explicitly enabled. | `.jpg,.jpeg,.png,.gif,.webp,.avif,.bmp` |
+| `RI_ALLOW_SVG` | Allow SVG indexing/output. Keep disabled unless needed. | `false` |
+| `RI_HTTP_PROXY` | Optional HTTP proxy used only for remote link checks. | `http://127.0.0.1:10808` |
+| `RI_LINKCHECK_TIMEOUT` | Timeout in seconds for each remote link check. | `5` |
+| `RI_LINKCHECK_CONCURRENCY` | Maximum concurrent remote link checks when cURL is available. | `4` |
+| `RI_LINKCHECK_USER_AGENT` | User-Agent sent during remote link checks. | `random-image-api/1.0` |
+| `RI_LINKCHECK_VERIFY_TLS` | Verify TLS certificates for HTTPS remote links. | `true` |
+| `RI_LINKCHECK_BIND_RESOLVED_IP` | Bind cURL checks to the public IP resolved during validation when no proxy is used. | `true` |
+| `RI_LINKCHECK_ALLOWED_HOSTS` | Optional allowlist for remote image hosts. Wildcards like `*.example.org` are supported. | empty |
+| `RI_SENDFILE_MODE` | Local image output mode: `php`, `x-sendfile`, or `x-accel`. | `php` |
+| `RI_X_ACCEL_PREFIX` | Internal Nginx location prefix required for `x-accel`. | empty |
+
 ## Directory Example
 
 ```text

@@ -52,6 +52,39 @@ RI_HTTP_PROXY=
 
 完整变量列表见 `.env.example`。默认只接受 `localhost`、`127.0.0.1` 和 `[::1]` 作为请求 Host；部署到生产域名之前必须把域名写入 `RI_ALLOWED_HOSTS`。只有服务位于可信反向代理后面，才设置 `RI_TRUST_PROXY=true`。
 
+### 配置变量说明
+
+| 变量 | 含义 | 默认值 / 示例 |
+| --- | --- | --- |
+| `RI_FOLDERS` | 允许访问的顶层图片分类，多个分类用英文逗号分隔。 | `erciyuan,fengjing` |
+| `RI_IMAGE_ROOT` | 本地图片根目录；相对路径基于项目根目录解析。 | `images` |
+| `RI_LINK_FILES` | 每个分类目录内用于读取远程图片直链的 TXT 文件名。 | `links.txt` |
+| `RI_DEFAULT_MODE` | 默认随机响应模式：`redirect` 或 `json`。 | `redirect` |
+| `RI_SERVER_HOST` | Docker 或本地 PHP 服务启动时监听的主机。 | `0.0.0.0` |
+| `RI_SERVER_PORT` | Docker 或本地 PHP 服务启动时监听的端口。 | `3000` |
+| `RI_ALLOWED_HOSTS` | 允许的请求 Host 头；生产域名必须写在这里。 | `example.com,www.example.com` |
+| `RI_TRUST_PROXY` | 是否信任反向代理传入的 `X-Forwarded-Proto` 和 `X-Forwarded-Host`。 | `false` |
+| `RI_ADMIN_ENABLED` | 是否启用只读管理状态接口。 | `false` |
+| `RI_ADMIN_PREFIX` | 管理接口路由前缀，此前缀也会成为保留分类名。 | `/_api` |
+| `RI_ADMIN_TOKEN` | 管理接口启用后要求的 Bearer Token。 | 空 |
+| `RI_ADMIN_ALLOW_QUERY_TOKEN` | 是否允许用 `?token=` 传管理 token，优先使用 Bearer Token。 | `false` |
+| `RI_INDEX_DATABASE` | SQLite 索引数据库路径。 | `.runtime/image-index.sqlite` |
+| `RI_INDEX_LOCK` | 索引文件锁路径，用于避免并发重建索引。 | `.runtime/index.lock` |
+| `RI_INDEX_LOG` | JSONL 索引日志路径。 | `.runtime/index.log` |
+| `RI_INDEX_LOG_MAX_BYTES` | 索引日志达到多少字节后轮转；`0` 表示关闭大小轮转。 | `1048576` |
+| `RI_INDEX_LOG_BACKUPS` | 保留的索引日志轮转备份数量。 | `3` |
+| `RI_IMAGE_EXTENSIONS` | 允许索引的本地图片扩展名；SVG 需要额外开启。 | `.jpg,.jpeg,.png,.gif,.webp,.avif,.bmp` |
+| `RI_ALLOW_SVG` | 是否允许索引/输出 SVG；除非确实需要，否则保持关闭。 | `false` |
+| `RI_HTTP_PROXY` | 远程链接检查时使用的可选 HTTP 代理。 | `http://127.0.0.1:10808` |
+| `RI_LINKCHECK_TIMEOUT` | 单个远程链接检查超时时间，单位秒。 | `5` |
+| `RI_LINKCHECK_CONCURRENCY` | cURL 可用时远程链接检查的最大并发数。 | `4` |
+| `RI_LINKCHECK_USER_AGENT` | 远程链接检查时发送的 User-Agent。 | `random-image-api/1.0` |
+| `RI_LINKCHECK_VERIFY_TLS` | 检查 HTTPS 远程链接时是否校验证书。 | `true` |
+| `RI_LINKCHECK_BIND_RESOLVED_IP` | 不使用代理时，cURL 检查是否绑定到校验阶段解析出的公网 IP。 | `true` |
+| `RI_LINKCHECK_ALLOWED_HOSTS` | 远程图片域名白名单，可使用 `*.example.org` 这类通配符。 | 空 |
+| `RI_SENDFILE_MODE` | 本地图片输出模式：`php`、`x-sendfile` 或 `x-accel`。 | `php` |
+| `RI_X_ACCEL_PREFIX` | 使用 `x-accel` 时需要配置的 Nginx 内部 location 前缀。 | 空 |
+
 ## 目录示例
 
 ```text
