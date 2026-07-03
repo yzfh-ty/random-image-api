@@ -141,8 +141,9 @@ function ri_random_item_from_query(
         $params[':orientation'] = $imageType;
     }
 
-    $total = ri_count_random_candidates($index, $fromSql, $whereParts, $params);
-    if ($total === 0) {
+    $stats = ri_candidate_folder_stats($index, $fromSql, $whereParts, $params);
+    $total = ri_total_candidate_count($stats);
+    if ($total < 1) {
         return null;
     }
 
@@ -153,31 +154,103 @@ function ri_random_item_from_query(
         $candidateWhereParts[] = 'NOT (i.folder = :last_folder AND i.id = :last_id)';
         $candidateParams[':last_folder'] = $last['folder'];
         $candidateParams[':last_id'] = $last['id'];
-        $candidateTotal = ri_count_random_candidates($index, $fromSql, $candidateWhereParts, $candidateParams);
-        if ($candidateTotal === 0) {
+        $candidateStats = ri_candidate_folder_stats($index, $fromSql, $candidateWhereParts, $candidateParams);
+        if (ri_total_candidate_count($candidateStats) < 1) {
             $candidateWhereParts = $whereParts;
             $candidateParams = $params;
-            $candidateTotal = $total;
+            $candidateStats = $stats;
         }
     } else {
-        $candidateTotal = $total;
+        $candidateStats = $stats;
     }
 
-    $offset = random_int(0, $candidateTotal - 1);
-    $statement = $index->prepare(
-        'SELECT i.folder, i.index_key, i.source_type, i.target, i.extension, i.orientation, i.id
-         FROM ' . $fromSql . '
-         WHERE ' . implode(' AND ', $candidateWhereParts) . '
-         ORDER BY i.folder, i.id
-         LIMIT 1 OFFSET :offset'
-    );
-    foreach ($candidateParams as $key => $value) {
-        $statement->bindValue($key, $value, is_int($value) ? PDO::PARAM_INT : PDO::PARAM_STR);
+    $folderStats = ri_pick_candidate_folder_stats($candidateStats);
+    if ($folderStats === null) {
+        return null;
     }
-    $statement->bindValue(':offset', $offset, PDO::PARAM_INT);
+
+    return ri_random_item_from_folder_stats($index, $config, $baseDir, $fromSql, $candidateWhereParts, $candidateParams, $folderStats);
+}
+
+function ri_candidate_folder_stats(PDO $index, string $fromSql, array $whereParts, array $params): array
+{
+    $statement = $index->prepare(
+        'SELECT i.folder, COUNT(*) AS total, MIN(i.id) AS min_id, MAX(i.id) AS max_id
+         FROM ' . $fromSql . '
+         WHERE ' . implode(' AND ', $whereParts) . '
+         GROUP BY i.folder
+         ORDER BY i.folder'
+    );
+    ri_bind_sql_params($statement, $params);
     $statement->execute();
 
-    $row = $statement->fetch(PDO::FETCH_ASSOC);
+    $stats = [];
+    foreach ($statement->fetchAll(PDO::FETCH_ASSOC) as $row) {
+        $total = (int)($row['total'] ?? 0);
+        $minId = (int)($row['min_id'] ?? 0);
+        $maxId = (int)($row['max_id'] ?? 0);
+        if ($total < 1 || $minId < 1 || $maxId < $minId) {
+            continue;
+        }
+
+        $stats[] = [
+            'folder' => (string)$row['folder'],
+            'total' => $total,
+            'minId' => $minId,
+            'maxId' => $maxId,
+        ];
+    }
+
+    return $stats;
+}
+
+function ri_total_candidate_count(array $stats): int
+{
+    $total = 0;
+    foreach ($stats as $row) {
+        $total += (int)$row['total'];
+    }
+
+    return $total;
+}
+
+function ri_pick_candidate_folder_stats(array $stats): ?array
+{
+    $total = ri_total_candidate_count($stats);
+    if ($total < 1) {
+        return null;
+    }
+
+    $pick = random_int(1, $total);
+    foreach ($stats as $row) {
+        $pick -= (int)$row['total'];
+        if ($pick <= 0) {
+            return $row;
+        }
+    }
+
+    return $stats[array_key_last($stats)] ?? null;
+}
+
+function ri_random_item_from_folder_stats(
+    PDO $index,
+    array $config,
+    string $baseDir,
+    string $fromSql,
+    array $whereParts,
+    array $params,
+    array $folderStats
+): ?array {
+    $candidateId = random_int((int)$folderStats['minId'], (int)$folderStats['maxId']);
+    $whereParts[] = 'i.folder = :candidate_folder';
+    $params[':candidate_folder'] = $folderStats['folder'];
+    $params[':candidate_id'] = $candidateId;
+
+    $row = ri_fetch_random_item_near_id($index, $fromSql, $whereParts, $params, '>=');
+    if (!is_array($row)) {
+        $row = ri_fetch_random_item_near_id($index, $fromSql, $whereParts, $params, '<');
+    }
+
     if (!is_array($row)) {
         return null;
     }
@@ -185,19 +258,37 @@ function ri_random_item_from_query(
     return ri_row_to_item($row, $config, $baseDir);
 }
 
-function ri_count_random_candidates(PDO $index, string $fromSql, array $whereParts, array $params): int
-{
+function ri_fetch_random_item_near_id(
+    PDO $index,
+    string $fromSql,
+    array $whereParts,
+    array $params,
+    string $operator
+): ?array {
+    $whereParts[] = 'i.id ' . $operator . ' :candidate_id';
     $statement = $index->prepare(
-        'SELECT COUNT(*)
+        'SELECT i.folder, i.index_key, i.source_type, i.target, i.extension, i.orientation, i.id
          FROM ' . $fromSql . '
-         WHERE ' . implode(' AND ', $whereParts)
+         WHERE ' . implode(' AND ', $whereParts) . '
+         ORDER BY i.id
+         LIMIT 1'
     );
+    ri_bind_sql_params($statement, $params);
+    $statement->execute();
+
+    $row = $statement->fetch(PDO::FETCH_ASSOC);
+    if (!is_array($row)) {
+        return null;
+    }
+
+    return $row;
+}
+
+function ri_bind_sql_params(PDOStatement $statement, array $params): void
+{
     foreach ($params as $key => $value) {
         $statement->bindValue($key, $value, is_int($value) ? PDO::PARAM_INT : PDO::PARAM_STR);
     }
-    $statement->execute();
-
-    return (int)$statement->fetchColumn();
 }
 
 function ri_parse_image_key(?string $key): ?array

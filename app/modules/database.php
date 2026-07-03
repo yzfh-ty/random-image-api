@@ -34,6 +34,9 @@ function ri_open_image_index(array $config, string $baseDir): PDO
     );
     ri_ensure_image_index_schema($pdo);
     $pdo->exec('CREATE INDEX IF NOT EXISTS idx_image_index_orientation ON image_index (orientation)');
+    $pdo->exec('CREATE INDEX IF NOT EXISTS idx_image_index_folder_orientation_id ON image_index (folder, orientation, id)');
+    $pdo->exec('CREATE INDEX IF NOT EXISTS idx_image_index_folder_source_id ON image_index (folder, source_type, id)');
+    $pdo->exec('CREATE INDEX IF NOT EXISTS idx_image_index_folder_source_orientation_id ON image_index (folder, source_type, orientation, id)');
     $pdo->exec(
         'CREATE TABLE IF NOT EXISTS image_sequences (
             folder TEXT PRIMARY KEY,
