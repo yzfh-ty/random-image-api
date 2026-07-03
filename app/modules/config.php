@@ -6,55 +6,41 @@ function ri_load_config(string $baseDir): array
 {
     ri_load_env_file($baseDir);
 
-    $path = $baseDir . DIRECTORY_SEPARATOR . 'config.json';
-    if (!is_file($path)) {
-        if (ri_env_string('RI_FOLDERS') === null) {
-            ri_send_error(500, 'invalid_config', 'config.json is missing and RI_FOLDERS is not set.');
-        }
-
-        $decoded = [];
-    } else {
-        $decoded = json_decode((string)file_get_contents($path), true);
-        if (!is_array($decoded)) {
-            ri_send_error(500, 'invalid_config', 'config.json is invalid JSON.');
-        }
-    }
-
-    return ri_normalize_config($decoded);
+    return ri_normalize_config();
 }
 
-function ri_normalize_config(array $raw): array
+function ri_normalize_config(): array
 {
     $config = [
         'server' => [
-            'host' => ri_config_string_with_env($raw['server']['host'] ?? null, 'RI_SERVER_HOST', '0.0.0.0'),
-            'port' => ri_config_int_with_env($raw['server']['port'] ?? null, 'RI_SERVER_PORT', 3000),
-            'trustProxy' => ri_config_bool_with_env($raw['server']['trustProxy'] ?? null, 'RI_TRUST_PROXY', false),
-            'allowedHosts' => ri_config_list_with_env($raw['server']['allowedHosts'] ?? null, 'RI_ALLOWED_HOSTS', []),
+            'host' => ri_config_string_with_env('RI_SERVER_HOST', '0.0.0.0'),
+            'port' => ri_config_int_with_env('RI_SERVER_PORT', 3000),
+            'trustProxy' => ri_config_bool_with_env('RI_TRUST_PROXY', false),
+            'allowedHosts' => ri_config_list_with_env('RI_ALLOWED_HOSTS', []),
         ],
-        'imageRoot' => ri_config_string_with_env($raw['imageRoot'] ?? null, 'RI_IMAGE_ROOT', 'images'),
-        'folders' => ri_config_list_with_env($raw['folders'] ?? null, 'RI_FOLDERS', []),
-        'linkFiles' => ri_config_list_with_env($raw['linkFiles'] ?? null, 'RI_LINK_FILES', ['links.txt']),
-        'adminPrefix' => ri_config_string_with_env($raw['adminPrefix'] ?? null, 'RI_ADMIN_PREFIX', '/_api'),
-        'adminEnabled' => ri_config_bool_with_env($raw['adminEnabled'] ?? null, 'RI_ADMIN_ENABLED', false),
-        'adminToken' => ri_config_string_with_env($raw['adminToken'] ?? null, 'RI_ADMIN_TOKEN', ''),
-        'adminAllowQueryToken' => ri_config_bool_with_env($raw['adminAllowQueryToken'] ?? null, 'RI_ADMIN_ALLOW_QUERY_TOKEN', false),
-        'indexDatabase' => ri_config_string_with_env($raw['indexDatabase'] ?? null, 'RI_INDEX_DATABASE', '.runtime/image-index.sqlite'),
-        'indexLock' => ri_config_string_with_env($raw['indexLock'] ?? null, 'RI_INDEX_LOCK', '.runtime/index.lock'),
-        'indexLog' => ri_config_string_with_env($raw['indexLog'] ?? null, 'RI_INDEX_LOG', '.runtime/index.log'),
-        'imageExtensions' => ri_config_list_with_env($raw['imageExtensions'] ?? null, 'RI_IMAGE_EXTENSIONS', RI_DEFAULT_IMAGE_EXTENSIONS),
-        'allowSvg' => ri_config_bool_with_env($raw['allowSvg'] ?? null, 'RI_ALLOW_SVG', false),
-        'defaultMode' => ri_config_string_with_env($raw['defaultMode'] ?? null, 'RI_DEFAULT_MODE', 'redirect'),
+        'imageRoot' => ri_config_string_with_env('RI_IMAGE_ROOT', 'images'),
+        'folders' => ri_config_list_with_env('RI_FOLDERS', []),
+        'linkFiles' => ri_config_list_with_env('RI_LINK_FILES', ['links.txt']),
+        'adminPrefix' => ri_config_string_with_env('RI_ADMIN_PREFIX', '/_api'),
+        'adminEnabled' => ri_config_bool_with_env('RI_ADMIN_ENABLED', false),
+        'adminToken' => ri_config_string_with_env('RI_ADMIN_TOKEN', ''),
+        'adminAllowQueryToken' => ri_config_bool_with_env('RI_ADMIN_ALLOW_QUERY_TOKEN', false),
+        'indexDatabase' => ri_config_string_with_env('RI_INDEX_DATABASE', '.runtime/image-index.sqlite'),
+        'indexLock' => ri_config_string_with_env('RI_INDEX_LOCK', '.runtime/index.lock'),
+        'indexLog' => ri_config_string_with_env('RI_INDEX_LOG', '.runtime/index.log'),
+        'imageExtensions' => ri_config_list_with_env('RI_IMAGE_EXTENSIONS', RI_DEFAULT_IMAGE_EXTENSIONS),
+        'allowSvg' => ri_config_bool_with_env('RI_ALLOW_SVG', false),
+        'defaultMode' => ri_config_string_with_env('RI_DEFAULT_MODE', 'redirect'),
         'linkCheck' => [
-            'timeoutSeconds' => ri_config_int_with_env($raw['linkCheck']['timeoutSeconds'] ?? null, 'RI_LINKCHECK_TIMEOUT', 5),
-            'userAgent' => ri_config_string_with_env($raw['linkCheck']['userAgent'] ?? null, 'RI_LINKCHECK_USER_AGENT', 'random-image-api/1.0'),
-            'proxy' => ri_config_string_with_env($raw['linkCheck']['proxy'] ?? null, 'RI_HTTP_PROXY', ''),
-            'verifyTls' => ri_config_bool_with_env($raw['linkCheck']['verifyTls'] ?? null, 'RI_LINKCHECK_VERIFY_TLS', true),
-            'allowedHosts' => ri_config_list_with_env($raw['linkCheck']['allowedHosts'] ?? null, 'RI_LINKCHECK_ALLOWED_HOSTS', []),
+            'timeoutSeconds' => ri_config_int_with_env('RI_LINKCHECK_TIMEOUT', 5),
+            'userAgent' => ri_config_string_with_env('RI_LINKCHECK_USER_AGENT', 'random-image-api/1.0'),
+            'proxy' => ri_config_string_with_env('RI_HTTP_PROXY', ''),
+            'verifyTls' => ri_config_bool_with_env('RI_LINKCHECK_VERIFY_TLS', true),
+            'allowedHosts' => ri_config_list_with_env('RI_LINKCHECK_ALLOWED_HOSTS', []),
         ],
         'sendfile' => [
-            'mode' => ri_config_string_with_env($raw['sendfile']['mode'] ?? null, 'RI_SENDFILE_MODE', 'php'),
-            'xAccelPrefix' => ri_config_string_with_env($raw['sendfile']['xAccelPrefix'] ?? null, 'RI_X_ACCEL_PREFIX', ''),
+            'mode' => ri_config_string_with_env('RI_SENDFILE_MODE', 'php'),
+            'xAccelPrefix' => ri_config_string_with_env('RI_X_ACCEL_PREFIX', ''),
         ],
     ];
 
@@ -198,29 +184,17 @@ function ri_env_string(string $envName): ?string
     return trim($envValue);
 }
 
-function ri_config_string_with_env(mixed $value, string $envName, string $default): string
+function ri_config_string_with_env(string $envName, string $default): string
 {
     $envValue = ri_env_string($envName);
-    if ($envValue !== null) {
-        return $envValue;
-    }
-
-    return is_string($value) && trim($value) !== '' ? trim($value) : $default;
+    return $envValue ?? $default;
 }
 
-function ri_config_bool_with_env(mixed $value, string $envName, bool $default): bool
+function ri_config_bool_with_env(string $envName, bool $default): bool
 {
     $envValue = ri_env_string($envName);
     if ($envValue !== null) {
         return ri_parse_config_bool($envValue, $envName);
-    }
-
-    if (is_bool($value)) {
-        return $value;
-    }
-
-    if (is_string($value) && trim($value) !== '') {
-        return ri_parse_config_bool($value, $envName);
     }
 
     return $default;
@@ -240,32 +214,24 @@ function ri_invalid_bool_config(string $name): bool
     ri_send_error(500, 'invalid_config', $name . ' must be a boolean value.');
 }
 
-function ri_config_int_with_env(mixed $value, string $envName, int $default): int
+function ri_config_int_with_env(string $envName, int $default): int
 {
     $envValue = ri_env_string($envName);
     if ($envValue !== null) {
         return (int)$envValue;
     }
 
-    if (is_int($value)) {
-        return $value;
-    }
-
-    if (is_string($value) && trim($value) !== '') {
-        return (int)$value;
-    }
-
     return $default;
 }
 
-function ri_config_list_with_env(mixed $value, string $envName, array $default): array
+function ri_config_list_with_env(string $envName, array $default): array
 {
     $envValue = ri_env_string($envName);
     if ($envValue !== null) {
         return ri_parse_env_list($envValue, $envName);
     }
 
-    return is_array($value) ? array_values($value) : $default;
+    return $default;
 }
 
 function ri_parse_env_list(string $value, string $envName): array

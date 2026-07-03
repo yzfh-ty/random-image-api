@@ -16,42 +16,29 @@ A PHP 8.2 + SQLite random image API. It randomly serves images from configured l
 - Requests can filter image type with `?type=pc` or `?type=mobile`; without this parameter, browser requests are auto-detected from Client Hints or User-Agent.
 - HTTP requests read from SQLite only. Directory scanning is never done during normal requests.
 
-Only top-level folders listed in `config.json` or `RI_FOLDERS` are accessible. Local folders that exist but are not configured return `404`.
+Only top-level folders listed in `RI_FOLDERS` are accessible. Local folders that exist but are not configured return `404`.
 
 ## Source And Runtime Data
 
 The repository only tracks source code, configuration templates, and documentation. Runtime data and local configuration are intentionally ignored:
 
-- `config.json`: local runtime configuration. Copy it from `config.example.json`.
-- `.env`: local environment overrides. Copy it from `.env.example` when needed.
+- `.env`: local runtime configuration. Copy it from `.env.example`.
 - `.runtime/`: SQLite database, index lock, index logs, and local-only test scratch files.
 - `images/`: local image storage.
 
-After deployment, copy `config.example.json` to `config.json`, optionally copy `.env.example` to `.env`, create local image folders on the server, for example `images/erciyuan`, then run the index command.
+After deployment, copy `.env.example` to `.env`, create local image folders on the server, for example `images/erciyuan`, then run the index command.
 
 ## Configuration
 
-The repository provides a minimal `config.example.json`. Copy it before running the app:
-
-```powershell
-Copy-Item config.example.json config.json
-```
-
-Usually `config.json` only needs category names:
-
-```json
-{
-  "folders": ["erciyuan"]
-}
-```
-
-All runtime values can be overridden by real environment variables or a local `.env` file. Priority is: system environment variables, then `.env`, then `config.json`, then built-in defaults.
+The project is configured with real environment variables or a local `.env` file. Copy the example before running the app:
 
 ```powershell
 Copy-Item .env.example .env
 ```
 
-Common `.env` overrides:
+Configuration priority is: system environment variables, then `.env`, then built-in defaults.
+
+The only required variable is `RI_FOLDERS`:
 
 ```dotenv
 RI_FOLDERS=erciyuan,fengjing
@@ -179,7 +166,7 @@ curl.exe -H "Authorization: Bearer replace-with-a-long-random-token" http://127.
 - Use `public/` as the web root.
 - `public/.htaccess` handles Apache rewrites and blocks dotfiles. The application entrypoint lives in `public/`.
 - Only `GET` and `HEAD` are allowed.
-- Top-level categories must be present in `config.json` or `RI_FOLDERS`.
+- Top-level categories must be present in `RI_FOLDERS`.
 - Paths reject `../`, backslashes, and null bytes.
 - Short URLs do not expose original file names.
 - SVG is disabled by default to avoid scriptable SVG risks.

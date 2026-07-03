@@ -16,42 +16,29 @@
 - 请求可用 `?type=pc` 或 `?type=mobile` 指定类型；不传时会根据 Client Hints 或 User-Agent 自动判断。
 - HTTP 请求只查 SQLite，不实时扫描目录，避免图片过多时卡住。
 
-只有 `config.json` 或 `RI_FOLDERS` 中配置过的顶层目录可以访问。本地存在但未配置的目录会返回 `404`。
+只有 `RI_FOLDERS` 中配置过的顶层目录可以访问。本地存在但未配置的目录会返回 `404`。
 
 ## 源码与运行数据
 
 仓库只提交源码、配置模板和文档，不提交运行数据和本地配置：
 
-- `config.json`：本地运行配置，从 `config.example.json` 复制生成。
-- `.env`：本地环境变量覆盖配置，需要时从 `.env.example` 复制生成。
+- `.env`：本地运行配置，从 `.env.example` 复制生成。
 - `.runtime/`：SQLite、索引锁、索引日志和本地测试临时文件。
 - `images/`：本地图片目录。
 
-部署后先复制 `config.example.json` 为 `config.json`，需要覆盖运行参数时再复制 `.env.example` 为 `.env`，然后在服务器本地创建图片目录，例如 `images/erciyuan`，最后执行索引命令。
+部署后先复制 `.env.example` 为 `.env`，然后在服务器本地创建图片目录，例如 `images/erciyuan`，最后执行索引命令。
 
 ## 配置
 
-仓库提供精简的 `config.example.json`。运行前先复制一份本地配置：
-
-```powershell
-Copy-Item config.example.json config.json
-```
-
-通常 `config.json` 只需要写分类名：
-
-```json
-{
-  "folders": ["erciyuan"]
-}
-```
-
-所有运行参数都可以通过真实环境变量或本地 `.env` 覆盖。优先级为：系统环境变量、`.env`、`config.json`、程序默认值。
+项目使用真实环境变量或本地 `.env` 配置。运行前先复制一份示例配置：
 
 ```powershell
 Copy-Item .env.example .env
 ```
 
-常用 `.env` 覆盖项：
+配置优先级为：系统环境变量、`.env`、程序默认值。
+
+唯一必填变量是 `RI_FOLDERS`：
 
 ```dotenv
 RI_FOLDERS=erciyuan,fengjing
@@ -179,7 +166,7 @@ curl.exe -H "Authorization: Bearer replace-with-a-long-random-token" http://127.
 - 推荐 Web 根目录指向 `public/`。
 - `public/.htaccess` 负责 Apache 路由重写并阻止访问点文件；应用入口只保留在 `public/`。
 - 只允许 `GET` 和 `HEAD` 请求。
-- 顶层分类必须配置在 `config.json` 或 `RI_FOLDERS` 中。
+- 顶层分类必须配置在 `RI_FOLDERS` 中。
 - 路径会拒绝 `../`、反斜杠和空字节。
 - 短链接不暴露原始文件名。
 - SVG 默认禁用，避免脚本型 SVG 风险。
