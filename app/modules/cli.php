@@ -21,6 +21,18 @@ function ri_cli_main(string $baseDir, array $argv): int
             return 0;
         }
 
+        if ($command === 'config') {
+            $config = ri_load_config($baseDir);
+            ri_cli_output(ri_cli_config_snapshot($config, $baseDir), $options['json'], 'ri_cli_print_config');
+            return 0;
+        }
+
+        if ($command === 'doctor') {
+            $result = ri_cli_doctor($baseDir);
+            ri_cli_output($result, $options['json'], 'ri_cli_print_doctor');
+            return $result['ok'] ? 0 : 1;
+        }
+
         if ($command === 'check-links') {
             $result = ri_check_remote_links($baseDir, $options['folder'] ?? null);
             ri_cli_output($result, $options['json'], 'ri_cli_print_check_links_summary');
@@ -46,6 +58,8 @@ function ri_cli_print_usage(string $script): void
     echo "Usage:\n";
     echo "  php {$script} index [--folder=name]   Rebuild the SQLite image index.\n";
     echo "  php {$script} status [--json]         Show index status and folder counts.\n";
+    echo "  php {$script} config [--json]         Show effective runtime configuration.\n";
+    echo "  php {$script} doctor [--json]         Check PHP extensions, paths, and folders.\n";
     echo "  php {$script} check-links             Check remote links from links.txt.\n";
 }
 
@@ -81,6 +95,149 @@ function ri_cli_output(array $payload, bool $json, callable $printer): void
     $printer($payload);
 }
 
+function ri_cli_config_snapshot(array $config, string $baseDir): array
+{
+    $linkCheck = $config['linkCheck'];
+    $linkCheck['proxySet'] = $linkCheck['proxy'] !== '';
+    $linkCheck['proxy'] = $linkCheck['proxy'] === '' ? '' : '[redacted]';
+
+    return [
+        'server' => $config['server'],
+        'imageRoot' => $config['imageRoot'],
+        'folders' => $config['folders'],
+        'linkFiles' => $config['linkFiles'],
+        'admin' => [
+            'enabled' => $config['adminEnabled'],
+            'prefix' => $config['adminPrefix'],
+            'tokenSet' => $config['adminToken'] !== '',
+            'allowQueryToken' => $config['adminAllowQueryToken'],
+        ],
+        'index' => [
+            'database' => $config['indexDatabase'],
+            'lock' => $config['indexLock'],
+            'log' => $config['indexLog'],
+        ],
+        'images' => [
+            'extensions' => $config['imageExtensions'],
+            'allowSvg' => $config['allowSvg'],
+            'defaultMode' => $config['defaultMode'],
+        ],
+        'linkCheck' => $linkCheck,
+        'sendfile' => $config['sendfile'],
+        'resolvedPaths' => [
+            'baseDir' => $baseDir,
+            'imageRoot' => ri_resolve_path($baseDir, $config['imageRoot']),
+            'indexDatabase' => ri_resolve_path($baseDir, $config['indexDatabase']),
+            'indexLock' => ri_resolve_path($baseDir, $config['indexLock']),
+            'indexLog' => ri_resolve_path($baseDir, $config['indexLog']),
+        ],
+    ];
+}
+
+function ri_cli_doctor(string $baseDir): array
+{
+    $checks = [];
+    ri_cli_add_check(
+        $checks,
+        'php_version',
+        version_compare(PHP_VERSION, '8.2.0', '>=') ? 'ok' : 'fail',
+        'PHP version: ' . PHP_VERSION
+    );
+    ri_cli_add_check($checks, 'pdo_extension', class_exists(PDO::class) ? 'ok' : 'fail', 'PDO extension is available.');
+    ri_cli_add_check(
+        $checks,
+        'pdo_sqlite_driver',
+        class_exists(PDO::class) && in_array('sqlite', PDO::getAvailableDrivers(), true) ? 'ok' : 'fail',
+        'PDO SQLite driver is available.'
+    );
+    ri_cli_add_check($checks, 'image_size', function_exists('getimagesize') ? 'ok' : 'fail', 'getimagesize is available.');
+    ri_cli_add_check($checks, 'curl_extension', function_exists('curl_init') ? 'ok' : 'warn', 'cURL is optional; stream fallback is used when missing.');
+
+    try {
+        $config = ri_load_config($baseDir);
+        ri_cli_add_check($checks, 'config', 'ok', 'Configuration loaded successfully.');
+    } catch (Throwable $error) {
+        ri_cli_add_check($checks, 'config', 'fail', $error->getMessage());
+        return ri_cli_doctor_result($checks);
+    }
+
+    $imageRoot = ri_resolve_path($baseDir, $config['imageRoot']);
+    ri_cli_add_path_check($checks, 'image_root', $imageRoot, true);
+    foreach ($config['folders'] as $folder) {
+        $folderPath = ri_resolve_path($imageRoot, $folder);
+        $status = is_dir($folderPath) && ri_is_inside($imageRoot, $folderPath) ? 'ok' : 'fail';
+        ri_cli_add_check($checks, 'folder:' . $folder, $status, $folderPath);
+    }
+
+    foreach (['indexDatabase', 'indexLock', 'indexLog'] as $key) {
+        ri_cli_add_parent_path_check($checks, $key, ri_resolve_path($baseDir, $config[$key]));
+    }
+
+    $databasePath = ri_resolve_path($baseDir, $config['indexDatabase']);
+    ri_cli_add_check(
+        $checks,
+        'index_database',
+        is_file($databasePath) ? 'ok' : 'warn',
+        is_file($databasePath) ? 'SQLite index exists.' : 'SQLite index does not exist yet; run the index command.'
+    );
+
+    return ri_cli_doctor_result($checks);
+}
+
+function ri_cli_add_path_check(array &$checks, string $name, string $path, bool $mustBeDirectory): void
+{
+    $exists = $mustBeDirectory ? is_dir($path) : file_exists($path);
+    $readable = $exists && is_readable($path);
+    $writable = $exists && is_writable($path);
+    $status = $exists && $readable && $writable ? 'ok' : 'fail';
+    ri_cli_add_check($checks, $name, $status, $path);
+}
+
+function ri_cli_add_parent_path_check(array &$checks, string $name, string $path): void
+{
+    $directory = dirname($path);
+    if (is_dir($directory)) {
+        ri_cli_add_check($checks, $name, is_writable($directory) ? 'ok' : 'fail', $directory);
+        return;
+    }
+
+    $parent = dirname($directory);
+    $status = is_dir($parent) && is_writable($parent) ? 'warn' : 'fail';
+    ri_cli_add_check($checks, $name, $status, 'Directory does not exist yet: ' . $directory);
+}
+
+function ri_cli_add_check(array &$checks, string $name, string $status, string $message): void
+{
+    $checks[] = [
+        'name' => $name,
+        'status' => $status,
+        'message' => $message,
+    ];
+}
+
+function ri_cli_doctor_result(array $checks): array
+{
+    $failures = 0;
+    $warnings = 0;
+    foreach ($checks as $check) {
+        if (($check['status'] ?? '') === 'fail') {
+            $failures++;
+        }
+        if (($check['status'] ?? '') === 'warn') {
+            $warnings++;
+        }
+    }
+
+    return [
+        'ok' => $failures === 0,
+        'phpVersion' => PHP_VERSION,
+        'sapi' => PHP_SAPI,
+        'failureCount' => $failures,
+        'warningCount' => $warnings,
+        'checks' => $checks,
+    ];
+}
+
 function ri_cli_print_index_summary(array $stats): void
 {
     echo "Index rebuilt successfully.\n";
@@ -97,6 +254,29 @@ function ri_cli_print_index_summary(array $stats): void
         foreach ($stats['warnings'] as $warning) {
             echo '- ' . $warning . "\n";
         }
+    }
+}
+
+function ri_cli_print_config(array $config): void
+{
+    echo "Effective configuration:\n";
+    echo 'Image root: ' . $config['imageRoot'] . "\n";
+    echo 'Folders: ' . implode(', ', $config['folders']) . "\n";
+    echo 'Link files: ' . implode(', ', $config['linkFiles']) . "\n";
+    echo 'Default mode: ' . $config['images']['defaultMode'] . "\n";
+    echo 'Admin: ' . ($config['admin']['enabled'] ? 'enabled' : 'disabled')
+        . ', token set: ' . ($config['admin']['tokenSet'] ? 'yes' : 'no') . "\n";
+    echo 'Index database: ' . $config['index']['database'] . "\n";
+    echo 'Server: ' . $config['server']['host'] . ':' . $config['server']['port'] . "\n";
+}
+
+function ri_cli_print_doctor(array $result): void
+{
+    echo 'Doctor: ' . ($result['ok'] ? 'OK' : 'FAILED')
+        . ' (' . $result['failureCount'] . ' failures, ' . $result['warningCount'] . " warnings)\n";
+
+    foreach ($result['checks'] as $check) {
+        echo '- [' . strtoupper($check['status']) . '] ' . $check['name'] . ': ' . $check['message'] . "\n";
     }
 }
 
