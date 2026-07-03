@@ -1,0 +1,14 @@
+{
+  "server": {
+    "host": "0.0.0.0",
+    "port": 3000,
+    "trustProxy": true
+  },
+  "imageRoot": "images",
+  "folders": ["erciyuan"],
+  "linkFiles": ["links.txt"],
+  "adminPrefix": "/_api",
+  "indexDatabase": ".runtime/image-index.sqlite",
+  "imageExtensions": [".jpg", ".jpeg", ".png", ".gif", ".webp", ".avif", ".bmp", ".svg"],
+  "defaultMode": "redirect"
+}
