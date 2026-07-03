@@ -36,6 +36,10 @@ function ri_output_local_image(array $item, array $config): void
     $etag = '"' . md5($realPath . '|' . $size . '|' . $mtime) . '"';
     ri_security_headers();
     header('Content-Type: ' . ri_mime_type($realPath));
+    if ($item['extension'] === 'svg') {
+        header("Content-Security-Policy: default-src 'none'; script-src 'none'; base-uri 'none'; sandbox");
+        header('Content-Disposition: attachment; filename="' . $item['id'] . '.svg"');
+    }
     header('Content-Length: ' . (string)$size);
     header('Cache-Control: public, max-age=86400');
     header('ETag: ' . $etag);

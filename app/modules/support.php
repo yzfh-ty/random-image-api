@@ -131,6 +131,7 @@ function ri_is_safe_segment(string $segment): bool
     return $segment !== ''
         && $segment !== '.'
         && $segment !== '..'
+        && preg_match('/[\x00-\x1F\x7F]/', $segment) !== 1
         && !str_contains($segment, '/')
         && !str_contains($segment, '\\')
         && !str_contains($segment, "\0");

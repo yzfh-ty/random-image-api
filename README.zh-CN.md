@@ -201,9 +201,9 @@ curl.exe -H "Authorization: Bearer replace-with-a-long-random-token" http://127.
 - 只允许 `GET` 和 `HEAD` 请求。
 - Host 头受 `RI_ALLOWED_HOSTS` 限制；生产域名必须显式列出。
 - 顶层分类必须配置在 `RI_FOLDERS` 中。
-- 路径会拒绝 `../`、反斜杠和空字节。
+- 路径会拒绝 `../`、反斜杠、空字节和 ASCII 控制字符。
 - 短链接不暴露原始文件名。
-- SVG 默认禁用，避免脚本型 SVG 风险。
+- SVG 默认禁用，避免脚本型 SVG 风险；如果显式启用，本地 SVG 会按附件输出并附加严格 CSP。
 - 本地输出前会再次校验真实路径仍在分类目录内，并拒绝符号链接。
 - TXT 远程链接会拒绝 `localhost`、内网 IP、保留地址和云 metadata 主机；跳转检测也会校验重定向目标。
 - 远程链接可用 `RI_LINKCHECK_ALLOWED_HOSTS` 进一步限制允许的域名。

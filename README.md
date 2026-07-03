@@ -201,9 +201,9 @@ curl.exe -H "Authorization: Bearer replace-with-a-long-random-token" http://127.
 - Only `GET` and `HEAD` are allowed.
 - Host headers are restricted by `RI_ALLOWED_HOSTS`; production domains must be listed explicitly.
 - Top-level categories must be present in `RI_FOLDERS`.
-- Paths reject `../`, backslashes, and null bytes.
+- Paths reject `../`, backslashes, null bytes, and ASCII control characters.
 - Short URLs do not expose original file names.
-- SVG is disabled by default to avoid scriptable SVG risks.
+- SVG is disabled by default to avoid scriptable SVG risks; if explicitly enabled, local SVG files are sent as attachments with a restrictive CSP.
 - Local image output verifies the resolved real path remains inside the category directory and rejects symlinks.
 - TXT remote links reject localhost, private IPs, reserved addresses, and cloud metadata hosts. Redirect targets are checked too.
 - `RI_LINKCHECK_ALLOWED_HOSTS` can further restrict allowed remote image domains.
