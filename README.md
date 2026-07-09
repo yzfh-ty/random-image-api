@@ -80,7 +80,7 @@ Supported variables are listed in `.env.example`; `.env.production.example` high
 | `RI_MAX_IMAGE_BYTES` | Maximum local image file size; `0` disables the limit. | `52428800` |
 | `RI_REMOTE_REQUIRE_CHECKED` | Require a recent successful `check-links` result before remote short URLs redirect. | `true` |
 | `RI_REMOTE_CHECK_MAX_AGE` | Maximum age in seconds for a successful remote link check. | `86400` |
-| `RI_HTTP_PROXY` | Optional HTTP proxy used only for remote link checks. | `http://127.0.0.1:10808` |
+| `RI_HTTP_PROXY` | Optional HTTP proxy used only for remote link checks. | `http://proxy.example:8080` |
 | `RI_LINKCHECK_TIMEOUT` | Timeout in seconds for each remote link check. | `5` |
 | `RI_LINKCHECK_CONCURRENCY` | Maximum concurrent remote link checks when cURL is available. | `4` |
 | `RI_LINKCHECK_USER_AGENT` | User-Agent sent during remote link checks. | `random-image-api/1.0` |
@@ -140,48 +140,42 @@ The index command also organizes local files: it creates `pc/` and `mobile/` ins
 
 Index logs are written to `RI_INDEX_LOG` and rotated by size. The defaults keep the active log under `1048576` bytes and retain `3` backups; adjust `RI_INDEX_LOG_MAX_BYTES` and `RI_INDEX_LOG_BACKUPS` in `.env` when needed.
 
-Local PHP path used during development:
-
-```text
-D:\phpstudy_pro\Extensions\php\php8.2.9nts
-```
-
-The default `php.ini` on this machine contains the removed PHP 8.2 option `track_errors`, so CLI commands should use `-n` and enable SQLite extensions explicitly:
+The CLI examples assume `php` is available on `PATH` and has the required extensions enabled. If your PHP build does not load extensions by default, add the appropriate `-d extension=...` flags for your environment.
 
 ```powershell
-D:\phpstudy_pro\Extensions\php\php8.2.9nts\php.exe -n -d extension_dir=D:\phpstudy_pro\Extensions\php\php8.2.9nts\ext -d extension=pdo_sqlite -d extension=sqlite3 bin\console.php index
+php bin\console.php index
 ```
 
 Show index status:
 
 ```powershell
-D:\phpstudy_pro\Extensions\php\php8.2.9nts\php.exe -n -d extension_dir=D:\phpstudy_pro\Extensions\php\php8.2.9nts\ext -d extension=pdo_sqlite -d extension=sqlite3 bin\console.php status
+php bin\console.php status
 ```
 
 Show the effective configuration without exposing secrets:
 
 ```powershell
-D:\phpstudy_pro\Extensions\php\php8.2.9nts\php.exe -n -d extension_dir=D:\phpstudy_pro\Extensions\php\php8.2.9nts\ext -d extension=pdo_sqlite -d extension=sqlite3 bin\console.php config --json
+php bin\console.php config --json
 ```
 
 Check the local runtime, required PHP extensions, paths, and configured folders:
 
 ```powershell
-D:\phpstudy_pro\Extensions\php\php8.2.9nts\php.exe -n -d extension_dir=D:\phpstudy_pro\Extensions\php\php8.2.9nts\ext -d extension=pdo_sqlite -d extension=sqlite3 bin\console.php doctor
+php bin\console.php doctor
 ```
 
 Rebuild a single category:
 
 ```powershell
-D:\phpstudy_pro\Extensions\php\php8.2.9nts\php.exe -n -d extension_dir=D:\phpstudy_pro\Extensions\php\php8.2.9nts\ext -d extension=pdo_sqlite -d extension=sqlite3 bin\console.php index --folder=category-a
+php bin\console.php index --folder=category-a
 ```
 
 Check remote links:
 
 ```powershell
-$env:RI_HTTP_PROXY="http://127.0.0.1:10808"
+$env:RI_HTTP_PROXY="http://proxy.example:8080"
 $env:RI_LINKCHECK_VERIFY_TLS="0"
-D:\phpstudy_pro\Extensions\php\php8.2.9nts\php.exe -n -d extension_dir=D:\phpstudy_pro\Extensions\php\php8.2.9nts\ext -d extension=curl -d extension=pdo_sqlite -d extension=sqlite3 bin\console.php check-links
+php bin\console.php check-links
 ```
 
 Set `RI_HTTP_PROXY` only when the current network needs a proxy. `RI_LINKCHECK_VERIFY_TLS=0` is only recommended for local testing; keep TLS verification enabled in production.
@@ -193,7 +187,7 @@ When `RI_LINKCHECK_BIND_RESOLVED_IP=true` and no proxy is configured, remote che
 Generate a strong admin token:
 
 ```powershell
-D:\phpstudy_pro\Extensions\php\php8.2.9nts\php.exe -n bin\console.php generate-token
+php bin\console.php generate-token
 ```
 
 ## Local Run
@@ -201,7 +195,7 @@ D:\phpstudy_pro\Extensions\php\php8.2.9nts\php.exe -n bin\console.php generate-t
 Use `public/` as the web root:
 
 ```powershell
-D:\phpstudy_pro\Extensions\php\php8.2.9nts\php.exe -n -d extension_dir=D:\phpstudy_pro\Extensions\php\php8.2.9nts\ext -d extension=pdo_sqlite -d extension=sqlite3 -S 127.0.0.1:3000 -t public public/index.php
+php -S 127.0.0.1:3000 -t public public/index.php
 ```
 
 Stop the local server process after testing.
@@ -222,8 +216,8 @@ git push origin v1.0.0
 After the workflow finishes, pull and run the image:
 
 ```powershell
-docker pull ghcr.io/yzfh-ty/random-image-api:v1.0.0
-docker run --rm -p 3000:3000 --env-file .env -v ${PWD}/images:/app/images -v ${PWD}/.runtime:/app/.runtime ghcr.io/yzfh-ty/random-image-api:v1.0.0
+docker pull ghcr.io/OWNER/REPOSITORY:v1.0.0
+docker run --rm -p 3000:3000 --env-file .env -v ${PWD}/images:/app/images -v ${PWD}/.runtime:/app/.runtime ghcr.io/OWNER/REPOSITORY:v1.0.0
 ```
 
 For a semver tag such as `v1.0.0`, the workflow publishes `v1.0.0`, `1.0.0`, and `1.0` image tags.
@@ -234,7 +228,7 @@ For local smoke testing before tagging, build the image locally:
 docker build -t random-image-api:local .
 ```
 
-The container indexes images on startup by default. Set `RI_AUTO_INDEX_ON_START=false` when you want to run indexing separately with `docker run --rm --env-file .env -v ${PWD}/images:/app/images -v ${PWD}/.runtime:/app/.runtime ghcr.io/yzfh-ty/random-image-api:v1.0.0 php bin/console.php index`.
+The container indexes images on startup by default. Set `RI_AUTO_INDEX_ON_START=false` when you want to run indexing separately with `docker run --rm --env-file .env -v ${PWD}/images:/app/images -v ${PWD}/.runtime:/app/.runtime ghcr.io/OWNER/REPOSITORY:v1.0.0 php bin/console.php index`.
 The container drops PHP to the non-root `app` user by default. On Linux bind mounts, make sure the mounted `images` and `.runtime` directories are writable by UID `10001`, or set `RI_RUN_USER` to a suitable user inside a derived image. The entrypoint does not recursively change bind-mount ownership unless `RI_CHOWN_MOUNTS=true` is set.
 The Docker healthcheck sends the first `RI_ALLOWED_HOSTS` value as the Host header. Set `RI_HEALTHCHECK_HOST` when the healthcheck should use a different allowed host.
 If the GHCR package should be publicly pullable, set the package visibility to public in GitHub Packages.
@@ -242,7 +236,7 @@ If the GHCR package should be publicly pullable, set the package visibility to p
 Scan the built image for high and critical CVEs when Trivy is installed:
 
 ```powershell
-wsl.exe -e sh docker/scan-image.sh ghcr.io/yzfh-ty/random-image-api:v1.0.0
+wsl.exe -e sh docker/scan-image.sh ghcr.io/OWNER/REPOSITORY:v1.0.0
 ```
 
 ## Admin API
@@ -281,13 +275,13 @@ curl.exe -H "Authorization: Bearer <generated-token>" http://127.0.0.1:3000/_api
 Windows Task Scheduler example, hourly:
 
 ```powershell
-schtasks /Create /SC HOURLY /TN "RandomPicApiIndex" /TR "\"D:\phpstudy_pro\Extensions\php\php8.2.9nts\php.exe\" -n -d extension_dir=D:\phpstudy_pro\Extensions\php\php8.2.9nts\ext -d extension=pdo_sqlite -d extension=sqlite3 \"D:\project\api-image\bin\console.php\" index" /F
+schtasks /Create /SC HOURLY /TN "RandomImageApiIndex" /TR "\"C:\path\to\php.exe\" \"C:\path\to\random-image-api\bin\console.php\" index" /F
 ```
 
 Linux cron example:
 
 ```cron
-0 * * * * cd /path/to/api-image && php bin/console.php index >/tmp/random-pic-index.log 2>&1
+0 * * * * cd /srv/random-image-api && php bin/console.php index >/tmp/random-image-index.log 2>&1
 ```
 
 The index command uses a file lock, so only one indexing task can run at a time. SQLite WAL mode is enabled for more stable concurrent reads and index writes.
@@ -299,7 +293,7 @@ Apache or Nginx should point the site root to `public/`. A root-level `.htaccess
 Nginx example:
 
 ```nginx
-root /path/to/api-image/public;
+root /srv/random-image-api/public;
 
 location / {
     try_files $uri /index.php$is_args$args;

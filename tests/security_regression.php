@@ -213,7 +213,7 @@ function ri_test_remote_stream_fallback_requires_relaxed_guard(): void
         'Stream fallback must be blocked when resolved-IP binding is required without a proxy.'
     );
 
-    $config['linkCheck']['proxy'] = 'http://127.0.0.1:10808';
+    $config['linkCheck']['proxy'] = 'http://127.0.0.1:8080';
     ri_test_assert(
         ri_remote_stream_fallback_allowed($config),
         'Stream fallback may run when a proxy is explicitly configured.'
