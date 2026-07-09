@@ -210,26 +210,39 @@ D:\phpstudy_pro\Extensions\php\php8.2.9nts\php.exe -n -d extension_dir=D:\phpstu
 
 Docker 镜像基于固定 digest 的 `php:8.2-apache`，并使用 Apache 服务 `public/`，不再使用 PHP 内置 server 对外服务。容器使用固定的 Apache 站点配置，禁用 `.htaccess` 覆盖，隐藏版本细节，并关闭 HTTP TRACE。
 
-构建镜像：
+Docker 镜像由 GitHub Actions 发布到 GitHub Container Registry，并且只在推送匹配 `v*` 的 Git 标签时触发。普通分支 push 不会构建或发布镜像。
+
+创建并推送发布标签：
 
 ```powershell
-docker build -t random-image-api .
+git tag v1.0.0
+git push origin v1.0.0
 ```
 
-运行时挂载当前项目里的图片目录和运行目录：
+等待 workflow 完成后，拉取并运行镜像：
 
 ```powershell
-docker run --rm -p 3000:3000 --env-file .env -v ${PWD}/images:/app/images -v ${PWD}/.runtime:/app/.runtime random-image-api
+docker pull ghcr.io/yzfh-ty/random-image-api:v1.0.0
+docker run --rm -p 3000:3000 --env-file .env -v ${PWD}/images:/app/images -v ${PWD}/.runtime:/app/.runtime ghcr.io/yzfh-ty/random-image-api:v1.0.0
 ```
 
-容器默认启动时会自动索引。若想手动控制索引，可设置 `RI_AUTO_INDEX_ON_START=false`，再用 `docker run --rm --env-file .env -v ${PWD}/images:/app/images -v ${PWD}/.runtime:/app/.runtime random-image-api php bin/console.php index` 单独执行。
+例如推送 `v1.0.0` 这类 semver 标签时，workflow 会发布 `v1.0.0`、`1.0.0` 和 `1.0` 三个镜像标签。
+
+打标签前如需本地冒烟测试，可以本地构建：
+
+```powershell
+docker build -t random-image-api:local .
+```
+
+容器默认启动时会自动索引。若想手动控制索引，可设置 `RI_AUTO_INDEX_ON_START=false`，再用 `docker run --rm --env-file .env -v ${PWD}/images:/app/images -v ${PWD}/.runtime:/app/.runtime ghcr.io/yzfh-ty/random-image-api:v1.0.0 php bin/console.php index` 单独执行。
 容器默认会把 PHP 降权到非 root 的 `app` 用户运行。Linux bind mount 场景下，请确保挂载的 `images` 和 `.runtime` 目录允许 UID `10001` 写入，或在派生镜像中设置合适的 `RI_RUN_USER`。入口脚本默认不会递归修改 bind mount 属主；只有显式设置 `RI_CHOWN_MOUNTS=true` 时才会执行。
 Docker 健康检查会使用 `RI_ALLOWED_HOSTS` 的第一个值作为 Host 请求头；如果需要使用其它已允许的主机名，可设置 `RI_HEALTHCHECK_HOST`。
+如果希望 GHCR 镜像可以公开拉取，需要在 GitHub Packages 中把该 package 的可见性设为 public。
 
 安装 Trivy 后，可以扫描镜像里的高危和严重 CVE：
 
 ```powershell
-wsl.exe -e sh docker/scan-image.sh random-image-api
+wsl.exe -e sh docker/scan-image.sh ghcr.io/yzfh-ty/random-image-api:v1.0.0
 ```
 
 ## 管理接口

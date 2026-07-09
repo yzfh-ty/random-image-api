@@ -210,26 +210,39 @@ Stop the local server process after testing.
 
 The Docker image is based on a pinned `php:8.2-apache` digest and serves `public/` with Apache instead of the PHP built-in server. The container uses a fixed Apache site config, disables `.htaccess` overrides, hides version details, and disables HTTP TRACE.
 
-Build the image:
+Docker images are published by GitHub Actions to GitHub Container Registry only when a Git tag matching `v*` is pushed. Normal branch pushes do not build or publish an image.
+
+Create and push a release tag:
 
 ```powershell
-docker build -t random-image-api .
+git tag v1.0.0
+git push origin v1.0.0
 ```
 
-Run it with local images and runtime data mounted from the project directory:
+After the workflow finishes, pull and run the image:
 
 ```powershell
-docker run --rm -p 3000:3000 --env-file .env -v ${PWD}/images:/app/images -v ${PWD}/.runtime:/app/.runtime random-image-api
+docker pull ghcr.io/yzfh-ty/random-image-api:v1.0.0
+docker run --rm -p 3000:3000 --env-file .env -v ${PWD}/images:/app/images -v ${PWD}/.runtime:/app/.runtime ghcr.io/yzfh-ty/random-image-api:v1.0.0
 ```
 
-The container indexes images on startup by default. Set `RI_AUTO_INDEX_ON_START=false` when you want to run indexing separately with `docker run --rm --env-file .env -v ${PWD}/images:/app/images -v ${PWD}/.runtime:/app/.runtime random-image-api php bin/console.php index`.
+For a semver tag such as `v1.0.0`, the workflow publishes `v1.0.0`, `1.0.0`, and `1.0` image tags.
+
+For local smoke testing before tagging, build the image locally:
+
+```powershell
+docker build -t random-image-api:local .
+```
+
+The container indexes images on startup by default. Set `RI_AUTO_INDEX_ON_START=false` when you want to run indexing separately with `docker run --rm --env-file .env -v ${PWD}/images:/app/images -v ${PWD}/.runtime:/app/.runtime ghcr.io/yzfh-ty/random-image-api:v1.0.0 php bin/console.php index`.
 The container drops PHP to the non-root `app` user by default. On Linux bind mounts, make sure the mounted `images` and `.runtime` directories are writable by UID `10001`, or set `RI_RUN_USER` to a suitable user inside a derived image. The entrypoint does not recursively change bind-mount ownership unless `RI_CHOWN_MOUNTS=true` is set.
 The Docker healthcheck sends the first `RI_ALLOWED_HOSTS` value as the Host header. Set `RI_HEALTHCHECK_HOST` when the healthcheck should use a different allowed host.
+If the GHCR package should be publicly pullable, set the package visibility to public in GitHub Packages.
 
 Scan the built image for high and critical CVEs when Trivy is installed:
 
 ```powershell
-wsl.exe -e sh docker/scan-image.sh random-image-api
+wsl.exe -e sh docker/scan-image.sh ghcr.io/yzfh-ty/random-image-api:v1.0.0
 ```
 
 ## Admin API
