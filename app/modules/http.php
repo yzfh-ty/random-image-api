@@ -7,6 +7,7 @@ function ri_handle_request(string $baseDir): void
     ri_enforce_request_method();
 
     $config = ri_load_config($baseDir);
+    ri_enforce_request_host($config);
     $index = ri_open_image_index($config, $baseDir);
     $path = ri_request_path();
 

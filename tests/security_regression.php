@@ -46,6 +46,7 @@ $tests = [
     'remote links are disabled without an allowlist' => 'ri_test_remote_links_require_allowlist',
     'private and unresolved remote hosts are rejected' => 'ri_test_private_and_unresolved_hosts_are_rejected',
     'remote stream fallback requires relaxed guard' => 'ri_test_remote_stream_fallback_requires_relaxed_guard',
+    'host allowlist is enforced globally' => 'ri_test_host_allowlist_is_enforced_globally',
     'fake local images are not indexed' => 'ri_test_fake_local_images_are_rejected',
     'generated admin token is strong' => 'ri_test_generated_admin_token_is_strong',
     'health status has required fields' => 'ri_test_health_status_fields_exist',
@@ -223,6 +224,31 @@ function ri_test_remote_stream_fallback_requires_relaxed_guard(): void
     );
 }
 
+function ri_test_host_allowlist_is_enforced_globally(): void
+{
+    $root = ri_test_temp_root();
+    try {
+        ri_test_write_env($root, [
+            'RI_FOLDERS=cat',
+            'RI_ALLOWED_HOSTS=example.com',
+        ]);
+        $config = ri_load_config($root);
+        $_SERVER['HTTP_HOST'] = 'evil.example';
+
+        $thrown = false;
+        try {
+            ri_enforce_request_host($config);
+        } catch (RuntimeException $error) {
+            $thrown = str_contains($error->getMessage(), 'Host is not allowed');
+        }
+
+        ri_test_assert($thrown, 'Every HTTP route should enforce RI_ALLOWED_HOSTS.');
+    } finally {
+        unset($_SERVER['HTTP_HOST']);
+        ri_test_delete_tree($root);
+    }
+}
+
 function ri_test_fake_local_images_are_rejected(): void
 {
     $root = ri_test_temp_root();
@@ -334,6 +360,13 @@ function ri_test_assert(bool $condition, string $message): void
 
 function ri_test_clear_env(): void
 {
+    unset(
+        $_SERVER['HTTP_HOST'],
+        $_SERVER['HTTP_X_FORWARDED_HOST'],
+        $_SERVER['HTTP_X_FORWARDED_PROTO'],
+        $_SERVER['HTTPS']
+    );
+
     foreach (RI_TEST_ENV_NAMES as $name) {
         putenv($name);
         unset($_ENV[$name], $_SERVER[$name]);

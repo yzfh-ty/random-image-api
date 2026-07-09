@@ -207,8 +207,11 @@ function ri_cli_doctor(string $baseDir): array
     } else {
         ri_cli_add_check($checks, 'allowed_hosts', 'ok', 'Allowed hosts are configured.');
     }
+    if ($config['adminAllowQueryToken']) {
+        ri_cli_add_check($checks, 'admin_query_token', 'warn', 'Query-string admin tokens can leak through logs and browser history; prefer Bearer tokens.');
+    }
     if ($config['server']['host'] === '0.0.0.0') {
-        ri_cli_add_check($checks, 'builtin_server_exposure', 'warn', 'Do not expose the PHP built-in server directly to the public Internet; place it behind a reverse proxy or use PHP-FPM.');
+        ri_cli_add_check($checks, 'builtin_server_exposure', 'warn', 'Do not expose the local PHP built-in server directly to the public Internet.');
     }
 
     $imageRoot = ri_resolve_path($baseDir, $config['imageRoot']);

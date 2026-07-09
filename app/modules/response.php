@@ -81,12 +81,23 @@ function ri_request_origin(array $config): string
 {
     $trustProxy = (bool)($config['server']['trustProxy'] ?? false);
     $proto = $trustProxy ? ri_first_header('HTTP_X_FORWARDED_PROTO') : null;
-    $host = $trustProxy ? ri_first_header('HTTP_X_FORWARDED_HOST') : null;
 
     if ($proto !== 'http' && $proto !== 'https') {
         $proto = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
     }
 
+    return $proto . '://' . ri_request_host($config);
+}
+
+function ri_enforce_request_host(array $config): void
+{
+    ri_request_host($config);
+}
+
+function ri_request_host(array $config): string
+{
+    $trustProxy = (bool)($config['server']['trustProxy'] ?? false);
+    $host = $trustProxy ? ri_first_header('HTTP_X_FORWARDED_HOST') : null;
     if ($host === null) {
         $host = $_SERVER['HTTP_HOST'] ?? 'localhost';
     }
@@ -99,7 +110,7 @@ function ri_request_origin(array $config): string
         ri_send_error(400, 'host_not_allowed', 'Host is not allowed.');
     }
 
-    return $proto . '://' . $host;
+    return $host;
 }
 
 function ri_send_json(int $statusCode, array $payload): void

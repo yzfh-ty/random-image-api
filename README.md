@@ -61,8 +61,9 @@ Supported variables are listed in `.env.example`; `.env.production.example` high
 | `RI_IMAGE_ROOT` | Local image root directory. Relative paths are resolved from the project root. | `images` |
 | `RI_LINK_FILES` | TXT file names read from each category for remote image links. | `links.txt` |
 | `RI_DEFAULT_MODE` | Default random response mode: `redirect` or `json`. | `redirect` |
-| `RI_SERVER_HOST` | Bind host used by Docker/local PHP server startup. | `0.0.0.0` |
-| `RI_SERVER_PORT` | Port used by Docker/local PHP server startup. | `3000` |
+| `RI_SERVER_HOST` | Bind host used by the local PHP built-in server command. Docker uses Apache. | `0.0.0.0` |
+| `RI_SERVER_PORT` | Port used by Docker Apache and local PHP server startup. | `3000` |
+| `RI_HEALTHCHECK_HOST` | Optional Docker healthcheck Host header; defaults to the first `RI_ALLOWED_HOSTS` value. | empty |
 | `RI_ALLOWED_HOSTS` | Allowed request Host headers. Set production domains here. | `example.com,www.example.com` |
 | `RI_TRUST_PROXY` | Trust `X-Forwarded-Proto` and `X-Forwarded-Host` from a reverse proxy. | `false` |
 | `RI_ADMIN_ENABLED` | Enable read-only admin status endpoints. | `false` |
@@ -207,6 +208,8 @@ Stop the local server process after testing.
 
 ## Docker
 
+The Docker image is based on a pinned `php:8.2-apache` digest and serves `public/` with Apache instead of the PHP built-in server. The container uses a fixed Apache site config, disables `.htaccess` overrides, hides version details, and disables HTTP TRACE.
+
 Build the image:
 
 ```powershell
@@ -220,7 +223,14 @@ docker run --rm -p 3000:3000 --env-file .env -v ${PWD}/images:/app/images -v ${P
 ```
 
 The container indexes images on startup by default. Set `RI_AUTO_INDEX_ON_START=false` when you want to run indexing separately with `docker run --rm --env-file .env -v ${PWD}/images:/app/images -v ${PWD}/.runtime:/app/.runtime random-image-api php bin/console.php index`.
-The container drops PHP to the non-root `app` user by default. On Linux bind mounts, make sure the mounted `images` and `.runtime` directories are writable by UID `10001`, or set `RI_RUN_USER` to a suitable user inside a derived image.
+The container drops PHP to the non-root `app` user by default. On Linux bind mounts, make sure the mounted `images` and `.runtime` directories are writable by UID `10001`, or set `RI_RUN_USER` to a suitable user inside a derived image. The entrypoint does not recursively change bind-mount ownership unless `RI_CHOWN_MOUNTS=true` is set.
+The Docker healthcheck sends the first `RI_ALLOWED_HOSTS` value as the Host header. Set `RI_HEALTHCHECK_HOST` when the healthcheck should use a different allowed host.
+
+Scan the built image for high and critical CVEs when Trivy is installed:
+
+```powershell
+wsl.exe -e sh docker/scan-image.sh random-image-api
+```
 
 ## Admin API
 

@@ -61,8 +61,9 @@ RI_HTTP_PROXY=
 | `RI_IMAGE_ROOT` | 本地图片根目录；相对路径基于项目根目录解析。 | `images` |
 | `RI_LINK_FILES` | 每个分类目录内用于读取远程图片直链的 TXT 文件名。 | `links.txt` |
 | `RI_DEFAULT_MODE` | 默认随机响应模式：`redirect` 或 `json`。 | `redirect` |
-| `RI_SERVER_HOST` | Docker 或本地 PHP 服务启动时监听的主机。 | `0.0.0.0` |
-| `RI_SERVER_PORT` | Docker 或本地 PHP 服务启动时监听的端口。 | `3000` |
+| `RI_SERVER_HOST` | 本地 PHP 内置 server 命令监听的主机；Docker 使用 Apache。 | `0.0.0.0` |
+| `RI_SERVER_PORT` | Docker Apache 和本地 PHP 服务启动时监听的端口。 | `3000` |
+| `RI_HEALTHCHECK_HOST` | 可选 Docker 健康检查 Host 头；默认使用 `RI_ALLOWED_HOSTS` 的第一个值。 | 空 |
 | `RI_ALLOWED_HOSTS` | 允许的请求 Host 头；生产域名必须写在这里。 | `example.com,www.example.com` |
 | `RI_TRUST_PROXY` | 是否信任反向代理传入的 `X-Forwarded-Proto` 和 `X-Forwarded-Host`。 | `false` |
 | `RI_ADMIN_ENABLED` | 是否启用只读管理状态接口。 | `false` |
@@ -207,6 +208,8 @@ D:\phpstudy_pro\Extensions\php\php8.2.9nts\php.exe -n -d extension_dir=D:\phpstu
 
 ## Docker
 
+Docker 镜像基于固定 digest 的 `php:8.2-apache`，并使用 Apache 服务 `public/`，不再使用 PHP 内置 server 对外服务。容器使用固定的 Apache 站点配置，禁用 `.htaccess` 覆盖，隐藏版本细节，并关闭 HTTP TRACE。
+
 构建镜像：
 
 ```powershell
@@ -220,7 +223,14 @@ docker run --rm -p 3000:3000 --env-file .env -v ${PWD}/images:/app/images -v ${P
 ```
 
 容器默认启动时会自动索引。若想手动控制索引，可设置 `RI_AUTO_INDEX_ON_START=false`，再用 `docker run --rm --env-file .env -v ${PWD}/images:/app/images -v ${PWD}/.runtime:/app/.runtime random-image-api php bin/console.php index` 单独执行。
-容器默认会把 PHP 降权到非 root 的 `app` 用户运行。Linux bind mount 场景下，请确保挂载的 `images` 和 `.runtime` 目录允许 UID `10001` 写入，或在派生镜像中设置合适的 `RI_RUN_USER`。
+容器默认会把 PHP 降权到非 root 的 `app` 用户运行。Linux bind mount 场景下，请确保挂载的 `images` 和 `.runtime` 目录允许 UID `10001` 写入，或在派生镜像中设置合适的 `RI_RUN_USER`。入口脚本默认不会递归修改 bind mount 属主；只有显式设置 `RI_CHOWN_MOUNTS=true` 时才会执行。
+Docker 健康检查会使用 `RI_ALLOWED_HOSTS` 的第一个值作为 Host 请求头；如果需要使用其它已允许的主机名，可设置 `RI_HEALTHCHECK_HOST`。
+
+安装 Trivy 后，可以扫描镜像里的高危和严重 CVE：
+
+```powershell
+wsl.exe -e sh docker/scan-image.sh random-image-api
+```
 
 ## 管理接口
 
