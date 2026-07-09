@@ -114,16 +114,18 @@ Images are published to GitHub Container Registry by GitHub Actions only when a 
 After a release workflow finishes:
 
 ```powershell
-docker pull ghcr.io/OWNER/REPOSITORY:v1.0.0
-docker run --rm -p 3000:3000 --env-file .env -v ${PWD}/images:/app/images -v ${PWD}/.runtime:/app/.runtime ghcr.io/OWNER/REPOSITORY:v1.0.0
+docker pull ghcr.io/yzfh-ty/random-image-api:latest
+docker run --rm -p 3000:3000 --env-file .env -v ${PWD}/images:/app/images -v ${PWD}/.runtime:/app/.runtime ghcr.io/yzfh-ty/random-image-api:latest
 ```
 
-For local testing:
+Or use Docker Compose:
 
 ```powershell
-docker build -t random-image-api:local .
-docker run --rm -p 3000:3000 --env-file .env -v ${PWD}/images:/app/images -v ${PWD}/.runtime:/app/.runtime random-image-api:local
+docker compose pull
+docker compose up -d
 ```
+
+Edit `docker-compose.yml` before deployment, especially `RI_FOLDERS`, `RI_ALLOWED_HOSTS`, and any remote-link or admin settings. Use a version tag instead of `latest` when you want a pinned deployment.
 
 The container runs Apache on port `3000` and indexes images on startup by default. Set `RI_AUTO_INDEX_ON_START=false` if you prefer to run indexing separately.
 

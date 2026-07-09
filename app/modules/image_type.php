@@ -39,6 +39,11 @@ function ri_normalize_image_type(string $value): string
 
 function ri_requested_image_type(): ?string
 {
+    return ri_requested_image_type_filter()['type'];
+}
+
+function ri_requested_image_type_filter(): array
+{
     foreach (['type', 'device', 'orientation'] as $key) {
         $value = $_GET[$key] ?? null;
         if (!is_string($value) || trim($value) === '') {
@@ -50,10 +55,16 @@ function ri_requested_image_type(): ?string
             ri_send_error(400, 'invalid_type', 'type must be pc or mobile.');
         }
 
-        return $type;
+        return [
+            'type' => $type,
+            'explicit' => true,
+        ];
     }
 
-    return ri_auto_detect_image_type();
+    return [
+        'type' => ri_auto_detect_image_type(),
+        'explicit' => false,
+    ];
 }
 
 function ri_normalize_requested_image_type(string $value): ?string

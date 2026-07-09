@@ -65,15 +65,34 @@ function ri_health_payload(array $status): array
 function ri_handle_random_database_request(?string $folder, PDO $index, array $config, string $baseDir): void
 {
     $source = ri_source_filter();
-    $imageType = ri_requested_image_type();
-    $item = $folder === null
-        ? ri_random_item_for_all($index, $config, $baseDir, $source, $imageType)
-        : ri_random_item_for_folder($index, $config, $baseDir, $folder, $source, $imageType);
+    $item = ri_random_item_for_request($index, $config, $baseDir, $folder, $source, ri_requested_image_type_filter());
     if ($item === null) {
         ri_send_error(404, 'empty_pool', 'No indexed image found. Run the CLI index command first.');
     }
 
     ri_respond_random_item($item, $config);
+}
+
+function ri_random_item_for_request(
+    PDO $index,
+    array $config,
+    string $baseDir,
+    ?string $folder,
+    ?string $source,
+    array $imageTypeFilter
+): ?array {
+    $imageType = is_string($imageTypeFilter['type'] ?? null) ? $imageTypeFilter['type'] : null;
+    $item = $folder === null
+        ? ri_random_item_for_all($index, $config, $baseDir, $source, $imageType)
+        : ri_random_item_for_folder($index, $config, $baseDir, $folder, $source, $imageType);
+
+    if ($item !== null || $imageType === null || (bool)($imageTypeFilter['explicit'] ?? false)) {
+        return $item;
+    }
+
+    return $folder === null
+        ? ri_random_item_for_all($index, $config, $baseDir, $source, null)
+        : ri_random_item_for_folder($index, $config, $baseDir, $folder, $source, null);
 }
 
 function ri_random_item_for_all(

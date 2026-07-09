@@ -51,6 +51,7 @@ $tests = [
     'x-accel prefix must be safe' => 'ri_test_x_accel_prefix_must_be_safe',
     'remote checks require image content type' => 'ri_test_remote_checks_require_image_content_type',
     'fake local images are not indexed' => 'ri_test_fake_local_images_are_rejected',
+    'auto type falls back when remote-only pool is unknown' => 'ri_test_auto_type_falls_back_for_remote_only_pool',
     'generated admin token is strong' => 'ri_test_generated_admin_token_is_strong',
     'health status has required fields' => 'ri_test_health_status_fields_exist',
     'health payload redacts index errors' => 'ri_test_health_payload_redacts_index_errors',
@@ -363,6 +364,52 @@ function ri_test_fake_local_images_are_rejected(): void
     }
 }
 
+function ri_test_auto_type_falls_back_for_remote_only_pool(): void
+{
+    $root = ri_test_temp_root();
+    $index = null;
+    try {
+        ri_test_write_env($root, [
+            'RI_FOLDERS=cat',
+            'RI_ALLOWED_HOSTS=localhost,127.0.0.1,[::1]',
+            'RI_LINKCHECK_ALLOWED_HOSTS=93.184.216.34',
+            'RI_REMOTE_REQUIRE_CHECKED=false',
+        ]);
+
+        $config = ri_load_config($root);
+        $index = ri_open_image_index($config, $root);
+        ri_index_image(
+            $index,
+            'cat',
+            'remote',
+            'https://93.184.216.34/image.jpg',
+            'jpg',
+            'https://93.184.216.34/image.jpg',
+            RI_IMAGE_TYPE_UNKNOWN
+        );
+
+        $_SERVER['HTTP_USER_AGENT'] = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)';
+        $filter = ri_requested_image_type_filter();
+        $item = ri_random_item_for_request($index, $config, $root, 'cat', null, $filter);
+
+        ri_test_assert($filter['type'] === RI_IMAGE_TYPE_PC, 'Browser request should auto-detect as pc.');
+        ri_test_assert($filter['explicit'] === false, 'Browser auto-detection must not be treated as explicit.');
+        ri_test_assert($item !== null, 'Auto-detected type should fall back when only remote unknown images are available.');
+        ri_test_assert($item['sourceType'] === 'remote', 'Fallback should return the remote image.');
+
+        $_GET['type'] = 'pc';
+        $explicitFilter = ri_requested_image_type_filter();
+        $explicitItem = ri_random_item_for_request($index, $config, $root, 'cat', null, $explicitFilter);
+        ri_test_assert($explicitFilter['explicit'] === true, 'Query-string type should be explicit.');
+        ri_test_assert($explicitItem === null, 'Explicit type filtering should remain strict.');
+    } finally {
+        $_GET = [];
+        unset($_SERVER['HTTP_USER_AGENT']);
+        $index = null;
+        ri_test_delete_tree($root);
+    }
+}
+
 function ri_test_generated_admin_token_is_strong(): void
 {
     $token = ri_generate_admin_token();
@@ -459,8 +506,13 @@ function ri_test_clear_env(): void
         $_SERVER['HTTP_HOST'],
         $_SERVER['HTTP_X_FORWARDED_HOST'],
         $_SERVER['HTTP_X_FORWARDED_PROTO'],
+        $_SERVER['HTTP_SEC_CH_UA_MOBILE'],
+        $_SERVER['HTTP_SEC_CH_VIEWPORT_WIDTH'],
+        $_SERVER['HTTP_VIEWPORT_WIDTH'],
+        $_SERVER['HTTP_USER_AGENT'],
         $_SERVER['HTTPS']
     );
+    $_GET = [];
 
     foreach (RI_TEST_ENV_NAMES as $name) {
         putenv($name);

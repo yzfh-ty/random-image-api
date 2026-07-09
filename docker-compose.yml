@@ -1,0 +1,17 @@
+name: random-image-api
+
+services:
+  app:
+    image: ghcr.io/yzfh-ty/random-image-api:latest
+    pull_policy: always
+    ports:
+      - "3000:3000"
+    environment:
+      RI_FOLDERS: "category-a"
+      RI_ALLOWED_HOSTS: "localhost,localhost:3000,127.0.0.1,127.0.0.1:3000,[::1],[::1]:3000"
+      RI_TRUST_PROXY: "false"
+      RI_CHOWN_MOUNTS: "true"
+    volumes:
+      - ./images:/app/images
+      - ./.runtime:/app/.runtime
+    restart: unless-stopped
