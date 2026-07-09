@@ -2,7 +2,7 @@
 
 [English](README.md) | 简体中文
 
-基于 PHP 8.2 + SQLite 的随机图片 API。项目用于从配置好的本地分类目录和目录内 `links.txt` 远程直链中随机返回图片，并生成当前域名下的短链接，例如 `/erciyuan/1.png`。
+基于 PHP 8.2 + SQLite 的随机图片 API。项目用于从配置好的本地分类目录和目录内 `links.txt` 远程直链中随机返回图片，并生成当前域名下的短链接，例如 `/category-a/1.png`。
 
 ## 功能
 
@@ -11,7 +11,7 @@
 - `GET /:folder/:id.ext`：访问索引生成的短图片链接；本地图片直接输出，TXT 远程链接 302 跳转到原始 URL。
 - `GET /_health`：返回适合监控使用的简洁健康检查 JSON。
 - `GET /?json=1`：返回当前域名下的短图片链接 JSON。
-- 浏览器直接打开 `/`、`/erciyuan` 时返回一个展示图片的 HTML 页面，刷新会重新随机。
+- 浏览器直接打开 `/`、`/category-a` 时返回一个展示图片的 HTML 页面，刷新会重新随机。
 - 作为 `<img>` 或 CSS 背景请求时，接口返回 302 到短图片链接。
 - 本地图片索引时会按宽高识别类型：横图为 `pc`，竖图为 `mobile`，并在索引时移动到受管理的 `pc/` 或 `mobile/` 目录。
 - 请求可用 `?type=pc` 或 `?type=mobile` 指定类型；不传时会根据 Client Hints 或 User-Agent 自动判断。
@@ -27,7 +27,7 @@
 - `.runtime/`：SQLite、索引锁、索引日志和本地测试临时文件。
 - `images/`：本地图片目录。
 
-部署后先复制 `.env.example` 为 `.env`，然后在服务器本地创建图片目录，例如 `images/erciyuan`，最后执行索引命令。
+部署后先复制 `.env.example` 为 `.env`，然后在服务器本地创建图片目录，例如 `images/category-a`，最后执行索引命令。
 
 ## 配置
 
@@ -42,7 +42,7 @@ Copy-Item .env.example .env
 唯一必填变量是 `RI_FOLDERS`：
 
 ```dotenv
-RI_FOLDERS=erciyuan,fengjing
+RI_FOLDERS=category-a,category-b
 RI_ALLOWED_HOSTS=example.com,www.example.com
 RI_TRUST_PROXY=false
 RI_ADMIN_ENABLED=false
@@ -57,7 +57,7 @@ RI_HTTP_PROXY=
 
 | 变量 | 含义 | 默认值 / 示例 |
 | --- | --- | --- |
-| `RI_FOLDERS` | 允许访问的顶层图片分类，多个分类用英文逗号分隔。 | `erciyuan,fengjing` |
+| `RI_FOLDERS` | 允许访问的顶层图片分类，多个分类用英文逗号分隔。 | `category-a,category-b` |
 | `RI_IMAGE_ROOT` | 本地图片根目录；相对路径基于项目根目录解析。 | `images` |
 | `RI_LINK_FILES` | 每个分类目录内用于读取远程图片直链的 TXT 文件名。 | `links.txt` |
 | `RI_DEFAULT_MODE` | 默认随机响应模式：`redirect` 或 `json`。 | `redirect` |
@@ -94,7 +94,7 @@ RI_HTTP_PROXY=
 
 ```text
 images/
-  erciyuan/
+  category-a/
     001.jpg            # 新上传图片；索引时会按尺寸移动
     links.txt
     pc/
@@ -104,8 +104,8 @@ images/
 ```
 
 - `/` 包含所有配置分类和分类根目录的 TXT 链接。
-- `/erciyuan` 只包含 `erciyuan` 这个分类。
-- `/erciyuan/pc` 和 `/erciyuan/mobile` 不是公开路由；需要横图或竖图时使用 `/erciyuan?type=pc` 或 `/erciyuan?type=mobile`。
+- `/category-a` 只包含 `category-a` 这个分类。
+- `/category-a/pc` 和 `/category-a/mobile` 不是公开路由；需要横图或竖图时使用 `/category-a?type=pc` 或 `/category-a?type=mobile`。
 - 其它子目录会被索引忽略，不再作为子分类。
 
 ## PC 和 Mobile 图片
@@ -117,13 +117,13 @@ images/
 - `square`：宽高相同。
 - `unknown`：无法读取尺寸，或来自 TXT 远程链接。
 
-新上传的本地图片直接放在分类目录，例如 `images/erciyuan/001.jpg`。执行索引命令后，横图会移动到 `images/erciyuan/pc/`，竖图会移动到 `images/erciyuan/mobile/`。方图或无法识别尺寸的图片会留在分类目录。
+新上传的本地图片直接放在分类目录，例如 `images/category-a/001.jpg`。执行索引命令后，横图会移动到 `images/category-a/pc/`，竖图会移动到 `images/category-a/mobile/`。方图或无法识别尺寸的图片会留在分类目录。
 
 随机接口支持显式指定类型：
 
 ```text
-/erciyuan?type=pc
-/erciyuan?type=mobile
+/category-a?type=pc
+/category-a?type=mobile
 ```
 
 也支持别名：`desktop`、`landscape`、`horizontal` 等同于 `pc`；`phone`、`portrait`、`vertical` 等同于 `mobile`。
@@ -173,7 +173,7 @@ D:\phpstudy_pro\Extensions\php\php8.2.9nts\php.exe -n -d extension_dir=D:\phpstu
 只重建单个分类：
 
 ```powershell
-D:\phpstudy_pro\Extensions\php\php8.2.9nts\php.exe -n -d extension_dir=D:\phpstudy_pro\Extensions\php\php8.2.9nts\ext -d extension=pdo_sqlite -d extension=sqlite3 bin\console.php index --folder=erciyuan
+D:\phpstudy_pro\Extensions\php\php8.2.9nts\php.exe -n -d extension_dir=D:\phpstudy_pro\Extensions\php\php8.2.9nts\ext -d extension=pdo_sqlite -d extension=sqlite3 bin\console.php index --folder=category-a
 ```
 
 检查远程链接：

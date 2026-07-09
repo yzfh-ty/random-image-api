@@ -2,7 +2,7 @@
 
 English | [简体中文](README.zh-CN.md)
 
-A PHP 8.2 + SQLite random image API. It randomly serves images from configured local category folders and remote image links listed in `links.txt`, then exposes short URLs under the current domain, such as `/erciyuan/1.png`.
+A PHP 8.2 + SQLite random image API. It randomly serves images from configured local category folders and remote image links listed in `links.txt`, then exposes short URLs under the current domain, such as `/category-a/1.png`.
 
 ## Features
 
@@ -11,7 +11,7 @@ A PHP 8.2 + SQLite random image API. It randomly serves images from configured l
 - `GET /:folder/:id.ext`: serves an indexed short image URL. Local images are streamed by the server, while remote TXT links return a 302 redirect to the original URL.
 - `GET /_health`: returns a compact JSON health check for monitoring.
 - `GET /?json=1`: returns JSON with a short image URL under the current domain.
-- Opening `/` or `/erciyuan` directly in a browser returns an HTML image viewer page. Refreshing the page picks a new image.
+- Opening `/` or `/category-a` directly in a browser returns an HTML image viewer page. Refreshing the page picks a new image.
 - Requests from `<img>` tags or CSS backgrounds receive a 302 redirect to the short image URL.
 - Local images are indexed as `pc` for landscape images and `mobile` for portrait images, then moved into managed `pc/` or `mobile/` folders during indexing.
 - Requests can filter image type with `?type=pc` or `?type=mobile`; without this parameter, browser requests are auto-detected from Client Hints or User-Agent.
@@ -27,7 +27,7 @@ The repository only tracks source code, configuration templates, and documentati
 - `.runtime/`: SQLite database, index lock, index logs, and local-only test scratch files.
 - `images/`: local image storage.
 
-After deployment, copy `.env.example` to `.env`, create local image folders on the server, for example `images/erciyuan`, then run the index command.
+After deployment, copy `.env.example` to `.env`, create local image folders on the server, for example `images/category-a`, then run the index command.
 
 ## Configuration
 
@@ -42,7 +42,7 @@ Configuration priority is: system environment variables, then `.env`, then built
 The only required variable is `RI_FOLDERS`:
 
 ```dotenv
-RI_FOLDERS=erciyuan,fengjing
+RI_FOLDERS=category-a,category-b
 RI_ALLOWED_HOSTS=example.com,www.example.com
 RI_TRUST_PROXY=false
 RI_ADMIN_ENABLED=false
@@ -57,7 +57,7 @@ Supported variables are listed in `.env.example`; `.env.production.example` high
 
 | Variable | Meaning | Default / Example |
 | --- | --- | --- |
-| `RI_FOLDERS` | Comma-separated top-level image categories that can be requested. | `erciyuan,fengjing` |
+| `RI_FOLDERS` | Comma-separated top-level image categories that can be requested. | `category-a,category-b` |
 | `RI_IMAGE_ROOT` | Local image root directory. Relative paths are resolved from the project root. | `images` |
 | `RI_LINK_FILES` | TXT file names read from each category for remote image links. | `links.txt` |
 | `RI_DEFAULT_MODE` | Default random response mode: `redirect` or `json`. | `redirect` |
@@ -94,7 +94,7 @@ Supported variables are listed in `.env.example`; `.env.production.example` high
 
 ```text
 images/
-  erciyuan/
+  category-a/
     001.jpg            # newly uploaded image; indexing will move it if it is pc/mobile
     links.txt
     pc/
@@ -104,8 +104,8 @@ images/
 ```
 
 - `/` includes all configured categories and root-level TXT links.
-- `/erciyuan` includes only the `erciyuan` category.
-- `/erciyuan/pc` and `/erciyuan/mobile` are not public routes; use `/erciyuan?type=pc` or `/erciyuan?type=mobile`.
+- `/category-a` includes only the `category-a` category.
+- `/category-a/pc` and `/category-a/mobile` are not public routes; use `/category-a?type=pc` or `/category-a?type=mobile`.
 - Other subdirectories are ignored by indexing and are not treated as subcategories.
 
 ## PC And Mobile Images
@@ -117,13 +117,13 @@ During indexing, local images are classified by dimensions:
 - `square`: width equals height.
 - `unknown`: dimensions cannot be detected, or the image comes from a TXT remote link.
 
-Put newly uploaded local images directly in the category folder, for example `images/erciyuan/001.jpg`. The index command moves landscape images into `images/erciyuan/pc/` and portrait images into `images/erciyuan/mobile/`. Square or unreadable images stay in the category folder.
+Put newly uploaded local images directly in the category folder, for example `images/category-a/001.jpg`. The index command moves landscape images into `images/category-a/pc/` and portrait images into `images/category-a/mobile/`. Square or unreadable images stay in the category folder.
 
 Random endpoints support explicit type filtering:
 
 ```text
-/erciyuan?type=pc
-/erciyuan?type=mobile
+/category-a?type=pc
+/category-a?type=mobile
 ```
 
 Aliases are also accepted: `desktop`, `landscape`, `horizontal` map to `pc`; `phone`, `portrait`, `vertical` map to `mobile`.
@@ -173,7 +173,7 @@ D:\phpstudy_pro\Extensions\php\php8.2.9nts\php.exe -n -d extension_dir=D:\phpstu
 Rebuild a single category:
 
 ```powershell
-D:\phpstudy_pro\Extensions\php\php8.2.9nts\php.exe -n -d extension_dir=D:\phpstudy_pro\Extensions\php\php8.2.9nts\ext -d extension=pdo_sqlite -d extension=sqlite3 bin\console.php index --folder=erciyuan
+D:\phpstudy_pro\Extensions\php\php8.2.9nts\php.exe -n -d extension_dir=D:\phpstudy_pro\Extensions\php\php8.2.9nts\ext -d extension=pdo_sqlite -d extension=sqlite3 bin\console.php index --folder=category-a
 ```
 
 Check remote links:
