@@ -57,14 +57,13 @@ function ri_is_allowed_host(string $host, array $allowedHosts): bool
     }
 
     $host = strtolower($host);
-    $hostWithoutPort = ri_host_without_port($host);
     foreach ($allowedHosts as $allowedHost) {
         if (!is_string($allowedHost)) {
             continue;
         }
 
         $allowedHost = strtolower($allowedHost);
-        if ($host === $allowedHost || $hostWithoutPort === $allowedHost) {
+        if ($host === $allowedHost) {
             return true;
         }
     }

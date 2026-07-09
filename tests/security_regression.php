@@ -47,6 +47,9 @@ $tests = [
     'private and unresolved remote hosts are rejected' => 'ri_test_private_and_unresolved_hosts_are_rejected',
     'remote stream fallback requires relaxed guard' => 'ri_test_remote_stream_fallback_requires_relaxed_guard',
     'host allowlist is enforced globally' => 'ri_test_host_allowlist_is_enforced_globally',
+    'host allowlist matches ports exactly' => 'ri_test_host_allowlist_matches_ports_exactly',
+    'x-accel prefix must be safe' => 'ri_test_x_accel_prefix_must_be_safe',
+    'remote checks require image content type' => 'ri_test_remote_checks_require_image_content_type',
     'fake local images are not indexed' => 'ri_test_fake_local_images_are_rejected',
     'generated admin token is strong' => 'ri_test_generated_admin_token_is_strong',
     'health status has required fields' => 'ri_test_health_status_fields_exist',
@@ -247,6 +250,98 @@ function ri_test_host_allowlist_is_enforced_globally(): void
         unset($_SERVER['HTTP_HOST']);
         ri_test_delete_tree($root);
     }
+}
+
+function ri_test_host_allowlist_matches_ports_exactly(): void
+{
+    ri_test_assert(ri_is_allowed_host('example.com', ['example.com']), 'Exact host should be allowed.');
+    ri_test_assert(!ri_is_allowed_host('example.com:8443', ['example.com']), 'Unlisted ports must not be allowed.');
+    ri_test_assert(ri_is_allowed_host('example.com:8443', ['example.com:8443']), 'Explicitly listed ports should be allowed.');
+    ri_test_assert(!ri_is_allowed_host('[::1]:3001', ['[::1]', '[::1]:3000']), 'IPv6 ports must also match exactly.');
+}
+
+function ri_test_x_accel_prefix_must_be_safe(): void
+{
+    ri_test_assert(ri_is_safe_x_accel_prefix('/_protected_images'), 'A simple absolute internal prefix should be accepted.');
+    ri_test_assert(ri_is_safe_x_accel_prefix('/internal/images-v1'), 'Nested safe prefixes should be accepted.');
+
+    foreach (['', '/', '../secret', '/..', '/internal/../secret', '/internal images', '/internal?x=1', '/internal\\images'] as $prefix) {
+        ri_test_assert(!ri_is_safe_x_accel_prefix($prefix), 'Unsafe x-accel prefix should be rejected: ' . $prefix);
+    }
+
+    $root = ri_test_temp_root();
+    try {
+        ri_test_write_env($root, [
+            'RI_FOLDERS=cat',
+            'RI_SENDFILE_MODE=x-accel',
+            'RI_X_ACCEL_PREFIX=/../secret',
+        ]);
+
+        $thrown = false;
+        try {
+            ri_load_config($root);
+        } catch (RuntimeException $error) {
+            $thrown = str_contains($error->getMessage(), 'RI_X_ACCEL_PREFIX must be an absolute internal path prefix');
+        }
+
+        ri_test_assert($thrown, 'Unsafe RI_X_ACCEL_PREFIX configuration should fail.');
+    } finally {
+        ri_test_delete_tree($root);
+    }
+}
+
+function ri_test_remote_checks_require_image_content_type(): void
+{
+    ri_test_assert(ri_remote_image_content_type_error('image/jpeg') === null, 'image/jpeg should be accepted.');
+    ri_test_assert(ri_remote_image_content_type_error('image/svg+xml') === null, 'image/svg+xml should be accepted as an image MIME type.');
+    ri_test_assert(
+        ri_remote_image_content_type_error(null) === 'Remote response did not include an image Content-Type.',
+        'Missing Content-Type should fail.'
+    );
+    ri_test_assert(
+        ri_remote_image_content_type_error('text/html') === 'Remote response Content-Type is not an image.',
+        'Non-image Content-Type should fail.'
+    );
+
+    $result = ri_public_remote_result([
+        'ok' => true,
+        'statusCode' => 200,
+        'error' => null,
+        'durationMs' => 12,
+        'contentType' => 'text/html',
+    ]);
+    ri_test_assert($result['ok'] === false, 'Public remote result should reject non-image responses.');
+    ri_test_assert($result['error'] === 'Remote response Content-Type is not an image.', 'Non-image error should be surfaced.');
+
+    ri_test_assert(
+        ri_should_retry_remote_head_with_get('HEAD', [
+            'ok' => false,
+            'statusCode' => 200,
+            'error' => 'Remote response did not include an image Content-Type.',
+        ]),
+        'HEAD checks without Content-Type should retry with GET.'
+    );
+
+    $state = [
+        'item' => ['url' => 'https://example.com/image.jpg'],
+        'startedAt' => microtime(true),
+        'done' => false,
+        'checked' => null,
+    ];
+    $nextRequests = [];
+    ri_update_remote_link_state_from_response($state, [
+        'state' => 0,
+        'url' => 'https://example.com/image.jpg',
+        'method' => 'GET',
+        'redirectsRemaining' => 5,
+        'ok' => true,
+        'statusCode' => 200,
+        'error' => null,
+        'contentType' => 'text/html',
+        'response' => "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\n",
+    ], $nextRequests, ['linkCheck' => ['allowedHosts' => ['example.com']]]);
+    ri_test_assert($state['done'] === true, 'Multi-check state should finish non-image responses.');
+    ri_test_assert($state['checked']['ok'] === false, 'Multi-check state should reject non-image responses.');
 }
 
 function ri_test_fake_local_images_are_rejected(): void

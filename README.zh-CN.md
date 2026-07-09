@@ -51,7 +51,7 @@ RI_DEFAULT_MODE=redirect
 RI_HTTP_PROXY=
 ```
 
-完整变量列表见 `.env.example`；`.env.production.example` 列出了偏生产环境的配置模板。默认只接受 `localhost`、`127.0.0.1` 和 `[::1]` 作为请求 Host；部署到生产域名之前必须把域名写入 `RI_ALLOWED_HOSTS`。只有服务位于可信反向代理后面，才设置 `RI_TRUST_PROXY=true`。
+完整变量列表见 `.env.example`；`.env.production.example` 列出了偏生产环境的配置模板。默认只接受本地主机和对应的 `:3000` 变体作为请求 Host；部署到生产域名之前必须把域名写入 `RI_ALLOWED_HOSTS`。Host 端口会精确匹配，如果客户端会发送端口，也要把端口写进去。只有服务位于可信反向代理后面，才设置 `RI_TRUST_PROXY=true`。
 
 ### 配置变量说明
 
@@ -64,7 +64,7 @@ RI_HTTP_PROXY=
 | `RI_SERVER_HOST` | 本地 PHP 内置 server 命令监听的主机；Docker 使用 Apache。 | `0.0.0.0` |
 | `RI_SERVER_PORT` | Docker Apache 和本地 PHP 服务启动时监听的端口。 | `3000` |
 | `RI_HEALTHCHECK_HOST` | 可选 Docker 健康检查 Host 头；默认使用 `RI_ALLOWED_HOSTS` 的第一个值。 | 空 |
-| `RI_ALLOWED_HOSTS` | 允许的请求 Host 头；生产域名必须写在这里。 | `example.com,www.example.com` |
+| `RI_ALLOWED_HOSTS` | 允许的请求 Host 头；端口会精确匹配，生产域名必须写在这里。 | `example.com,www.example.com` |
 | `RI_TRUST_PROXY` | 是否信任反向代理传入的 `X-Forwarded-Proto` 和 `X-Forwarded-Host`。 | `false` |
 | `RI_ADMIN_ENABLED` | 是否启用只读管理状态接口。 | `false` |
 | `RI_ADMIN_PREFIX` | 管理接口路由前缀，此前缀也会成为保留分类名。 | `/_api` |
@@ -88,7 +88,7 @@ RI_HTTP_PROXY=
 | `RI_LINKCHECK_BIND_RESOLVED_IP` | 不使用代理时，cURL 检查是否绑定到校验阶段解析出的公网 IP。 | `true` |
 | `RI_LINKCHECK_ALLOWED_HOSTS` | 远程图片域名白名单；为空时远程链接禁用，可使用 `*.example.org` 这类通配符。 | 空 |
 | `RI_SENDFILE_MODE` | 本地图片输出模式：`php`、`x-sendfile` 或 `x-accel`。 | `php` |
-| `RI_X_ACCEL_PREFIX` | 使用 `x-accel` 时需要配置的 Nginx 内部 location 前缀。 | 空 |
+| `RI_X_ACCEL_PREFIX` | 使用 `x-accel` 时需要配置的安全绝对 Nginx 内部 location 前缀。 | 空 |
 
 ## 目录示例
 
@@ -260,7 +260,7 @@ curl.exe -H "Authorization: Bearer <generated-token>" http://127.0.0.1:3000/_api
 - 短链接不暴露原始文件名。
 - SVG 默认禁用，避免脚本型 SVG 风险；如果显式启用，本地 SVG 会按附件输出并附加严格 CSP。
 - 本地输出前会再次校验真实路径仍在分类目录内，拒绝符号链接，执行 `RI_MAX_IMAGE_BYTES` 限制，并重新确认非 SVG 文件是可读取图片。
-- TXT 远程链接必须配置 `RI_LINKCHECK_ALLOWED_HOSTS`，并会拒绝 `localhost`、内网 IP、保留地址、无法解析的域名和云 metadata 主机；跳转检测也会校验重定向目标。
+- TXT 远程链接必须配置 `RI_LINKCHECK_ALLOWED_HOSTS`，并会拒绝 `localhost`、内网 IP、保留地址、无法解析的域名、云 metadata 主机和非图片 `Content-Type` 响应；跳转检测也会校验重定向目标。
 - 远程短链接默认要求最近一次 `check-links` 成功。
 
 ## 定时索引
@@ -281,7 +281,7 @@ Linux cron 示例：
 
 ## 部署提示
 
-Apache 或 Nginx 推荐将站点根目录指向 `public/`。
+Apache 或 Nginx 推荐将站点根目录指向 `public/`。仓库根目录提供了一个 `.htaccess` 作为 Apache 误暴露项目根目录时的兜底保护，但不能替代正确设置 Web 根目录。
 
 Nginx 示例：
 

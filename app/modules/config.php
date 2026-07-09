@@ -150,11 +150,40 @@ function ri_normalize_config(): array
         ri_send_error(500, 'invalid_config', 'sendfile.mode must be php, x-sendfile, or x-accel.');
     }
 
+    if ($config['sendfile']['xAccelPrefix'] !== '' && !ri_is_safe_x_accel_prefix($config['sendfile']['xAccelPrefix'])) {
+        ri_send_error(500, 'invalid_config', 'RI_X_ACCEL_PREFIX must be an absolute internal path prefix.');
+    }
+
     if ($config['sendfile']['mode'] === 'x-accel' && $config['sendfile']['xAccelPrefix'] === '') {
         ri_send_error(500, 'invalid_config', 'sendfile.xAccelPrefix is required when sendfile.mode is x-accel.');
     }
 
     return $config;
+}
+
+function ri_is_safe_x_accel_prefix(string $prefix): bool
+{
+    $prefix = trim($prefix);
+    if (
+        $prefix === ''
+        || !str_starts_with($prefix, '/')
+        || preg_match('/[\x00-\x1F\x7F\\\\?#]/', $prefix) === 1
+    ) {
+        return false;
+    }
+
+    $trimmed = trim($prefix, '/');
+    if ($trimmed === '') {
+        return false;
+    }
+
+    foreach (explode('/', $trimmed) as $segment) {
+        if ($segment === '' || $segment === '.' || $segment === '..' || !preg_match('/^[A-Za-z0-9._~-]+$/', $segment)) {
+            return false;
+        }
+    }
+
+    return true;
 }
 
 function ri_is_strong_admin_token(string $token): bool

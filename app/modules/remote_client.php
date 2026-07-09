@@ -142,9 +142,10 @@ function ri_request_remote_url(string $url, array $config, string $method, int $
 
     $meta = stream_get_meta_data($handle);
     fclose($handle);
-    $statusCode = ri_status_code_from_wrapper_data($meta['wrapper_data'] ?? []);
+    $headers = $meta['wrapper_data'] ?? [];
+    $statusCode = ri_status_code_from_wrapper_data($headers);
     if ($statusCode !== null && $statusCode >= 300 && $statusCode < 400 && $redirectsRemaining > 0) {
-        $location = ri_location_from_headers($meta['wrapper_data'] ?? []);
+        $location = ri_location_from_headers($headers);
         if ($location !== null) {
             $redirectUrl = ri_resolve_redirect_url($url, $location);
             if ($redirectUrl === null || !ri_is_safe_remote_url($redirectUrl, $config, true)) {
@@ -160,10 +161,11 @@ function ri_request_remote_url(string $url, array $config, string $method, int $
         }
     }
 
+    $contentTypeError = ri_remote_image_content_type_error(ri_content_type_from_headers($headers));
     return [
-        'ok' => $statusCode !== null && $statusCode >= 200 && $statusCode < 400,
+        'ok' => $statusCode !== null && $statusCode >= 200 && $statusCode < 400 && $contentTypeError === null,
         'statusCode' => $statusCode,
-        'error' => $statusCode === null ? 'No HTTP status returned.' : null,
+        'error' => $statusCode === null ? 'No HTTP status returned.' : $contentTypeError,
         'durationMs' => 0,
     ];
 }
@@ -355,6 +357,7 @@ function ri_remote_curl_handle_result($handle, mixed $response, float $startedAt
     $error = curl_error($handle);
     $errno = curl_errno($handle);
     $statusCode = (int)curl_getinfo($handle, CURLINFO_RESPONSE_CODE);
+    $contentType = $capturedHeaders === null ? null : ri_content_type_from_header_string($capturedHeaders);
 
     if ($errno !== 0 && !$bodyLimitExceeded) {
         return [
@@ -363,6 +366,7 @@ function ri_remote_curl_handle_result($handle, mixed $response, float $startedAt
             'error' => $error,
             'durationMs' => (int)round((microtime(true) - $startedAt) * 1000),
             'response' => $capturedHeaders ?? (is_string($response) ? $response : null),
+            'contentType' => $contentType,
         ];
     }
 
@@ -372,15 +376,20 @@ function ri_remote_curl_handle_result($handle, mixed $response, float $startedAt
         'error' => null,
         'durationMs' => (int)round((microtime(true) - $startedAt) * 1000),
         'response' => $capturedHeaders ?? (is_string($response) ? $response : null),
+        'contentType' => $contentType,
     ];
 }
 
 function ri_public_remote_result(array $result): array
 {
+    $contentTypeError = $result['error'] === null
+        ? ri_remote_image_content_type_error($result['contentType'] ?? null)
+        : null;
+
     return [
-        'ok' => $result['ok'],
+        'ok' => $result['ok'] && $contentTypeError === null,
         'statusCode' => $result['statusCode'],
-        'error' => $result['error'],
+        'error' => $result['error'] ?? $contentTypeError,
         'durationMs' => $result['durationMs'],
     ];
 }
@@ -403,6 +412,45 @@ function ri_location_from_header_string(string $headers): ?string
     }
 
     return trim((string)end($matches[1]));
+}
+
+function ri_content_type_from_headers(array $headers): ?string
+{
+    foreach (array_reverse($headers) as $header) {
+        if (is_string($header) && stripos($header, 'Content-Type:') === 0) {
+            return ri_normalize_content_type(substr($header, strlen('Content-Type:')));
+        }
+    }
+
+    return null;
+}
+
+function ri_content_type_from_header_string(string $headers): ?string
+{
+    if (preg_match_all('/^Content-Type:\s*(.+)$/im', $headers, $matches) < 1) {
+        return null;
+    }
+
+    return ri_normalize_content_type((string)end($matches[1]));
+}
+
+function ri_normalize_content_type(string $value): ?string
+{
+    $type = strtolower(trim(explode(';', $value, 2)[0]));
+    return $type === '' ? null : $type;
+}
+
+function ri_remote_image_content_type_error(?string $contentType): ?string
+{
+    if ($contentType === null) {
+        return 'Remote response did not include an image Content-Type.';
+    }
+
+    if (preg_match('#^image/[a-z0-9.+-]+$#', $contentType) !== 1) {
+        return 'Remote response Content-Type is not an image.';
+    }
+
+    return null;
 }
 
 function ri_resolve_redirect_url(string $baseUrl, string $location): ?string

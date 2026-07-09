@@ -1,0 +1,20 @@
+Options -Indexes
+
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+
+    RewriteRule ^(?:\.|app|bin|docker|tests|images|\.runtime)(?:/|$) - [F,L]
+    RewriteRule ^(?:Dockerfile|README(?:\.zh-CN)?\.md|\.dockerignore|\.gitignore)$ - [F,L]
+
+    RewriteRule ^$ public/index.php [QSA,L]
+    RewriteCond %{REQUEST_URI} !^/public/
+    RewriteRule ^(.+)$ public/$1 [QSA,L]
+</IfModule>
+
+<FilesMatch "^\.">
+    Require all denied
+</FilesMatch>
+
+<FilesMatch "^(Dockerfile|README(?:\.zh-CN)?\.md|\.dockerignore|\.gitignore)$">
+    Require all denied
+</FilesMatch>

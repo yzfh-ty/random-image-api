@@ -114,6 +114,9 @@ function ri_check_remote_url(string $url, array $config): array
     foreach (['HEAD', 'GET'] as $method) {
         $result = ri_request_remote_url($url, $config, $method);
         $lastResult = $result;
+        if (ri_should_retry_remote_head_with_get($method, $result)) {
+            continue;
+        }
         if ($result['ok'] || !in_array($result['statusCode'], [405, 403, 501], true)) {
             break;
         }
@@ -206,7 +209,15 @@ function ri_update_remote_link_state_from_response(array &$state, array $respons
         }
     }
 
-    if ($response['method'] === 'HEAD' && !$response['ok'] && in_array($statusCode, [405, 403, 501], true)) {
+    if (($response['error'] ?? null) === null) {
+        $contentTypeError = ri_remote_image_content_type_error($response['contentType'] ?? null);
+        if ($contentTypeError !== null) {
+            $response['ok'] = false;
+            $response['error'] = $contentTypeError;
+        }
+    }
+
+    if (ri_should_retry_remote_head_with_get($response['method'], $response)) {
         $nextRequests[] = [
             'state' => $response['state'],
             'url' => $state['item']['url'],
@@ -217,6 +228,23 @@ function ri_update_remote_link_state_from_response(array &$state, array $respons
     }
 
     ri_finish_remote_link_state($state, $response);
+}
+
+function ri_should_retry_remote_head_with_get(string $method, array $result): bool
+{
+    if ($method !== 'HEAD' || (bool)($result['ok'] ?? false)) {
+        return false;
+    }
+
+    $statusCode = $result['statusCode'] ?? null;
+    if (in_array($statusCode, [405, 403, 501], true)) {
+        return true;
+    }
+
+    return ($result['error'] ?? null) === 'Remote response did not include an image Content-Type.'
+        && is_int($statusCode)
+        && $statusCode >= 200
+        && $statusCode < 400;
 }
 
 function ri_finish_remote_link_state(array &$state, array $response): void

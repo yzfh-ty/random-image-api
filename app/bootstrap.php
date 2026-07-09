@@ -3,7 +3,7 @@
 declare(strict_types=1);
 
 const RI_RESERVED_FOLDERS = ['_api', '_assets', '_remote', '_health'];
-const RI_DEFAULT_ALLOWED_HOSTS = ['localhost', '127.0.0.1', '[::1]'];
+const RI_DEFAULT_ALLOWED_HOSTS = ['localhost', 'localhost:3000', '127.0.0.1', '127.0.0.1:3000', '[::1]', '[::1]:3000'];
 const RI_DEFAULT_IMAGE_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.avif', '.bmp'];
 const RI_DEFAULT_REMOTE_EXTENSION = 'jpg';
 const RI_IMAGE_INDEX_SCHEMA_VERSION = 1;

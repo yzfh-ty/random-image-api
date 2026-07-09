@@ -51,7 +51,7 @@ RI_DEFAULT_MODE=redirect
 RI_HTTP_PROXY=
 ```
 
-Supported variables are listed in `.env.example`; `.env.production.example` highlights production-oriented values. By default, only `localhost`, `127.0.0.1`, and `[::1]` are accepted as request hosts; set `RI_ALLOWED_HOSTS` to your production domain names before deploying. Set `RI_TRUST_PROXY=true` only when the app is behind a trusted reverse proxy.
+Supported variables are listed in `.env.example`; `.env.production.example` highlights production-oriented values. By default, local hosts and their `:3000` variants are accepted as request hosts; set `RI_ALLOWED_HOSTS` to your production domain names before deploying. Host ports are matched exactly, so include the public port when clients send it. Set `RI_TRUST_PROXY=true` only when the app is behind a trusted reverse proxy.
 
 ### Configuration Reference
 
@@ -64,7 +64,7 @@ Supported variables are listed in `.env.example`; `.env.production.example` high
 | `RI_SERVER_HOST` | Bind host used by the local PHP built-in server command. Docker uses Apache. | `0.0.0.0` |
 | `RI_SERVER_PORT` | Port used by Docker Apache and local PHP server startup. | `3000` |
 | `RI_HEALTHCHECK_HOST` | Optional Docker healthcheck Host header; defaults to the first `RI_ALLOWED_HOSTS` value. | empty |
-| `RI_ALLOWED_HOSTS` | Allowed request Host headers. Set production domains here. | `example.com,www.example.com` |
+| `RI_ALLOWED_HOSTS` | Allowed request Host headers. Ports are exact when present. Set production domains here. | `example.com,www.example.com` |
 | `RI_TRUST_PROXY` | Trust `X-Forwarded-Proto` and `X-Forwarded-Host` from a reverse proxy. | `false` |
 | `RI_ADMIN_ENABLED` | Enable read-only admin status endpoints. | `false` |
 | `RI_ADMIN_PREFIX` | Admin API route prefix. This prefix is reserved. | `/_api` |
@@ -88,7 +88,7 @@ Supported variables are listed in `.env.example`; `.env.production.example` high
 | `RI_LINKCHECK_BIND_RESOLVED_IP` | Bind cURL checks to the public IP resolved during validation when no proxy is used. | `true` |
 | `RI_LINKCHECK_ALLOWED_HOSTS` | Required allowlist for remote image hosts. Remote links are disabled when empty. Wildcards like `*.example.org` are supported. | empty |
 | `RI_SENDFILE_MODE` | Local image output mode: `php`, `x-sendfile`, or `x-accel`. | `php` |
-| `RI_X_ACCEL_PREFIX` | Internal Nginx location prefix required for `x-accel`. | empty |
+| `RI_X_ACCEL_PREFIX` | Safe absolute internal Nginx location prefix required for `x-accel`. | empty |
 
 ## Directory Example
 
@@ -260,7 +260,7 @@ curl.exe -H "Authorization: Bearer <generated-token>" http://127.0.0.1:3000/_api
 - Short URLs do not expose original file names.
 - SVG is disabled by default to avoid scriptable SVG risks; if explicitly enabled, local SVG files are sent as attachments with a restrictive CSP.
 - Local image output verifies the resolved real path remains inside the category directory, rejects symlinks, enforces `RI_MAX_IMAGE_BYTES`, and rechecks that non-SVG files are readable images.
-- TXT remote links require `RI_LINKCHECK_ALLOWED_HOSTS`, reject localhost, private IPs, reserved addresses, unresolved hosts, and cloud metadata hosts. Redirect targets are checked too.
+- TXT remote links require `RI_LINKCHECK_ALLOWED_HOSTS`, reject localhost, private IPs, reserved addresses, unresolved hosts, cloud metadata hosts, and non-image `Content-Type` responses. Redirect targets are checked too.
 - Remote short URLs require a recent successful `check-links` result by default.
 
 ## Scheduled Indexing
@@ -281,7 +281,7 @@ The index command uses a file lock, so only one indexing task can run at a time.
 
 ## Deployment
 
-Apache or Nginx should point the site root to `public/`.
+Apache or Nginx should point the site root to `public/`. A root-level `.htaccess` is included as an Apache fallback if the project root is accidentally exposed, but it is not a substitute for setting the web root correctly.
 
 Nginx example:
 
